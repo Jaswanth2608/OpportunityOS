@@ -22,7 +22,19 @@ classic JavaScript, so it also works from a local file.
 ## Current status
 
 **Milestone 1 complete:** design tokens, CSS reset and base typography.
-Layout, components and page logic follow in later milestones.
+
+**Milestone 2 complete:** shared application shell on all five pages — a 240px
+fixed sidebar at 1024px and above, and an accessible off-canvas navigation
+drawer with a compact header below that. Page content, components and data
+follow in later milestones.
+
+## Navigation
+
+All five pages share one shell. Above 1024px the sidebar is always visible.
+Below 1024px the menu button in the header opens the drawer, which can be
+closed with its close button, the dimmed backdrop, the Escape key, or by
+resizing the window to desktop width. While open, keyboard focus stays inside
+the drawer and the current page is marked with `aria-current="page"`.
 
 ## Design system
 

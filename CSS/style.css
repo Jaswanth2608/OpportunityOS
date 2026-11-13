@@ -13,6 +13,8 @@
      5. Typography                  (headings, paragraphs, text utilities)
      6. Focus, selection, motion    (keyboard and reduced-motion behaviour)
      7. Responsive token overrides  (breakpoints at 768px and 1024px)
+     8. Application shell           (header, sidebar, drawer, page container)
+     9. Responsive shell behaviour  (drawer below 1024px, fixed sidebar above)
 
    Important rules for later milestones:
      * Never write a colour value (hex, rgb, hsl) outside section 2.
@@ -92,9 +94,11 @@
   --duration: 150ms;     /* standard interaction transition      */
 
   /* --- Layering --------------------------------------------------------- */
+  --z-header: 80;   /* sticky mobile header              */
   --z-overlay: 90;  /* backdrop behind the mobile drawer */
   --z-drawer: 100;  /* the sliding side navigation       */
   --z-modal: 200;   /* dialogs above everything else     */
+  --z-skip: 300;    /* the "skip to content" link        */
 }
 
 
@@ -118,6 +122,7 @@
   --color-canvas: #f2f0ea;        /* Moonlit Grey: page background       */
   --color-surface: #ffffff;       /* cards, panels, inputs, table body   */
   --color-surface-alt: #ebe7de;   /* table headers, zebra rows, disabled */
+  --color-surface-hover: #f7f4ee; /* hovered rows, links and nav items   */
   --color-tint: #add4e0;          /* Ethereal Blue: highlight surfaces   */
 
   /* --- Text and icons --------------------------------------------------- */
@@ -139,6 +144,7 @@
   /* --- Text colours for filled surfaces ---------------------------------- */
   --color-on-accent: #ffffff;     /* label on --color-accent-strong      */
   --color-on-tint: #2a2321;       /* text on Ethereal Blue (8.9:1)       */
+  --color-overlay: rgba(42, 35, 33, 0.4); /* dims the page behind the drawer */
 
   /* --- Interaction ------------------------------------------------------- */
   --color-focus: #7a5644;         /* 2px focus-visible outline           */
@@ -437,5 +443,268 @@ strong {
 
     --fs-h2: 20px;
     --lh-h2: 28px;
+  }
+}
+
+
+/* ==========================================================================
+   8. Application shell
+   --------------------------------------------------------------------------
+   Every page shares the same shell:
+
+     .skip-link    first focusable element; jumps to the page content
+     .app-header   compact top bar with the menu button (hidden on desktop)
+     .sidebar      the main navigation; off-canvas on small screens
+     .overlay      dims the page while the drawer is open
+     .page         the content container for each page
+
+   Mobile-first: this section describes the phone layout. The desktop grid and
+   the permanently visible sidebar are in section 9.
+   ========================================================================== */
+
+/* --- Skip link -------------------------------------------------------- */
+
+/* Hidden above the viewport until it receives keyboard focus, so keyboard
+   users can jump past the navigation without seeing it otherwise. */
+.skip-link {
+  position: fixed;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: var(--z-skip);
+  padding: var(--space-2) var(--space-4);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  border: var(--border) solid var(--color-line-strong);
+  font-size: var(--fs-body);
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* --- Mobile header ---------------------------------------------------- */
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-header);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 56px;
+  padding: 0 var(--page-margin);
+  background-color: var(--color-surface);
+  border-bottom: var(--border) solid var(--color-line);
+}
+
+/* The hamburger button. 40x40px keeps it a comfortable touch target. */
+.menu-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  color: var(--color-ink);
+  border: var(--border) solid var(--color-line);
+  background-color: var(--color-surface);
+}
+
+.menu-toggle:hover {
+  border-color: var(--color-line-strong);
+  background-color: var(--color-surface-hover);
+}
+
+.app-header__brand {
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-h1);
+  color: var(--color-ink);
+}
+
+/* --- Sidebar ---------------------------------------------------------- */
+
+/* Off-canvas by default: parked just outside the left edge of the screen.
+   `visibility: hidden` also removes it from the tab order while closed. */
+.sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: var(--z-drawer);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: var(--sidebar-width);
+  padding: var(--space-5) var(--space-4);
+  overflow-y: auto;
+  background-color: var(--color-surface);
+  border-right: var(--border) solid var(--color-line);
+  transform: translateX(-100%);
+  visibility: hidden;
+  /* While closed the panel must never catch a click, even for the brief
+     moment it is still sliding out. */
+  pointer-events: none;
+  transition: transform var(--duration) ease-out,
+    visibility var(--duration) ease-out;
+}
+
+/* `drawer-open` is added to <body> by js/app.js. */
+body.drawer-open .sidebar {
+  transform: translateX(0);
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* Stop the page behind the drawer from scrolling while it is open. */
+body.drawer-open {
+  overflow: hidden;
+}
+
+.sidebar__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.sidebar__brand {
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-h1);
+  color: var(--color-ink);
+}
+
+/* The drawer's close button. Hidden on desktop, where the sidebar is fixed. */
+.sidebar__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  color: var(--color-ink-muted);
+  border: var(--border) solid var(--color-line);
+  background-color: var(--color-surface);
+}
+
+.sidebar__close:hover {
+  color: var(--color-ink);
+  border-color: var(--color-line-strong);
+  background-color: var(--color-surface-hover);
+}
+
+.nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* Nav links are 44px tall for comfortable touch use, and the 2px left border
+   is the active marker (transparent when inactive so text never shifts). */
+.nav-link {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border-left: var(--border-strong) solid transparent;
+  color: var(--color-ink-muted);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+.nav-link:hover {
+  background-color: var(--color-surface-hover);
+  color: var(--color-ink);
+}
+
+/* The current page, marked in the HTML with aria-current="page". */
+.nav-link[aria-current="page"] {
+  border-left-color: var(--color-accent);
+  background-color: var(--color-surface-hover);
+  color: var(--color-ink);
+  font-weight: var(--fw-medium);
+}
+
+/* Small note at the bottom of the sidebar, pushed down with margin-top: auto. */
+.sidebar__note {
+  margin-top: auto;
+  padding-top: var(--space-4);
+  border-top: var(--border) solid var(--color-line);
+}
+
+/* --- Overlay ---------------------------------------------------------- */
+
+/* The dim layer behind the drawer. It is only displayed while the drawer is
+   open, so it never blocks clicks on the page when closed. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  display: none;
+  background-color: var(--color-overlay);
+  border: 0;
+}
+
+body.drawer-open .overlay {
+  display: block;
+}
+
+/* --- Page container --------------------------------------------------- */
+
+.page {
+  padding: var(--space-6) var(--page-margin) var(--space-8);
+}
+
+
+/* ==========================================================================
+   9. Responsive shell behaviour
+   --------------------------------------------------------------------------
+   Below 1024px the sidebar is a drawer opened from the header.
+   At 1024px and above the header and close button disappear, and the sidebar
+   becomes a permanent 240px column beside the page content.
+   ========================================================================== */
+
+@media (min-width: 1024px) {
+  /* No hamburger needed: the navigation is always visible. */
+  .app-header {
+    display: none;
+  }
+
+  /* Two columns: fixed-width navigation, then the flexible content area.
+     minmax(0, 1fr) stops long content from forcing the grid wider. */
+  .app-layout {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    min-height: 100vh;
+  }
+
+  /* Back into the normal flow: a sticky column instead of a sliding panel.
+     align-self: start is required for position: sticky inside a grid. */
+  .sidebar {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    width: auto;
+    transform: none;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .sidebar__close {
+    display: none;
+  }
+
+  .overlay {
+    display: none;
+  }
+
+  /* If the drawer class is left over from the mobile view, ignore it here. */
+  body.drawer-open {
+    overflow: auto;
+  }
+
+  .page {
+    padding-top: var(--space-7);
   }
 }

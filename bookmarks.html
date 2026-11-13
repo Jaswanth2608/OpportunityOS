@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bookmarks | OpportunityOS</title>
+    <meta
+      name="description"
+      content="Opportunities you saved to come back to later."
+    />
+
+    <!-- The stylesheet uses Inter and JetBrains Mono when they are available
+         and falls back to system fonts otherwise, so the site works offline.
+         Optional: to load the real webfonts, uncomment these three lines.
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    -->
+
+    <link rel="stylesheet" href="CSS/style.css" />
+  </head>
+
+  <body>
+    <!-- First focusable element on every page: lets keyboard users jump
+         straight past the navigation. -->
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <!-- Compact top bar. Only visible below 1024px, where the sidebar is a
+         drawer instead of a permanent column. -->
+    <header class="app-header">
+      <button
+        class="menu-toggle"
+        type="button"
+        data-menu-toggle
+        aria-controls="app-sidebar"
+        aria-expanded="false"
+        aria-label="Open navigation menu"
+      >
+        <svg
+          width="18"
+          height="14"
+          viewBox="0 0 18 14"
+          fill="none"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path
+            d="M0 1h18M0 7h18M0 13h18"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+        </svg>
+      </button>
+
+      <a class="app-header__brand" href="index.html">OpportunityOS</a>
+    </header>
+
+    <div class="app-layout">
+      <!-- Main navigation. A drawer below 1024px, a 240px fixed column above. -->
+      <aside class="sidebar" id="app-sidebar" aria-label="Main navigation">
+        <div class="sidebar__top">
+          <a class="sidebar__brand" href="index.html">OpportunityOS</a>
+
+          <button
+            class="sidebar__close"
+            type="button"
+            data-menu-close
+            aria-label="Close navigation menu"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                d="M2 2l12 12M14 2L2 14"
+                stroke="currentColor"
+                stroke-width="1.5"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <nav class="sidebar__nav">
+          <ul class="nav-list">
+            <li>
+              <a class="nav-link" href="index.html"
+                >Dashboard</a
+              >
+            </li>
+            <li>
+              <a class="nav-link" href="explore.html">Explore Opportunities</a>
+            </li>
+            <li>
+              <a class="nav-link" href="applications.html">My Applications</a>
+            </li>
+            <li>
+              <a class="nav-link" href="bookmarks.html" aria-current="page">Bookmarks</a>
+            </li>
+            <li>
+              <a class="nav-link" href="analytics.html">Analytics</a>
+            </li>
+          </ul>
+        </nav>
+
+        <p class="sidebar__note text-small text-muted">
+          Sample data, stored only in this browser.
+        </p>
+      </aside>
+
+      <main class="page" id="main-content">
+        <h1>Bookmarks</h1>
+        <p class="text-muted">
+          Saved opportunities are added in a later milestone.
+        </p>
+      </main>
+    </div>
+
+    <!-- Dimmed backdrop for the open drawer; clicking it closes the drawer. -->
+    <div class="overlay" data-overlay></div>
+
+    <script src="js/app.js" defer></script>
+  </body>
+</html>
