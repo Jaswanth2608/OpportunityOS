@@ -1,0 +1,441 @@
+/* ==========================================================================
+   OpportunityOS — main stylesheet
+   --------------------------------------------------------------------------
+   Milestone 1: design tokens, reset and base typography only.
+   Layout, components and page styles are added in later milestones.
+
+   How this file is organised (read top to bottom):
+
+     1. Design tokens — structure   (spacing, layout, type, borders, layering)
+     2. Design tokens — colour      (THE ONLY PLACE WITH COLOUR VALUES)
+     3. Reset                       (predictable starting point for browsers)
+     4. Page base                   (font settings for the whole page)
+     5. Typography                  (headings, paragraphs, text utilities)
+     6. Focus, selection, motion    (keyboard and reduced-motion behaviour)
+     7. Responsive token overrides  (breakpoints at 768px and 1024px)
+
+   Important rules for later milestones:
+     * Never write a colour value (hex, rgb, hsl) outside section 2.
+       Every style must use a var(--color-...) token instead.
+     * This stylesheet is mobile-first: the base rules describe the mobile
+       layout, and the only media queries use min-width (768px, 1024px).
+   ========================================================================== */
+
+
+/* ==========================================================================
+   1. Design tokens — structure
+   --------------------------------------------------------------------------
+   These values never change when the colour palette changes.
+   They come from the approved wireframe design system: an 8px rhythm with a
+   4px micro step, sharp 0px corners, 1px structural borders and no shadows.
+   ========================================================================== */
+
+:root {
+  /* --- Spacing scale (4px sub-grid, 8px rhythm) ------------------------ */
+  --space-1: 4px;   /* micro alignment      */
+  --space-2: 8px;   /* tight gaps           */
+  --space-3: 12px;  /* compact padding      */
+  --space-4: 16px;  /* default spacing unit */
+  --space-5: 24px;  /* card padding         */
+  --space-6: 32px;  /* section spacing      */
+  --space-7: 40px;  /* large separation     */
+  --space-8: 48px;  /* biggest separation   */
+
+  /* --- Layout ---------------------------------------------------------- */
+  --sidebar-width: 240px;  /* fixed side navigation on desktop */
+  --gutter: 16px;          /* space between grid columns       */
+  --page-margin: 16px;     /* outer page margin                */
+  --container-max: 1440px; /* maximum content width            */
+
+  /* --- Font families ---------------------------------------------------
+     Inter and JetBrains Mono are listed first. If they are not installed and
+     no webfont is loaded, the system fallbacks are used, so the site always
+     works without an internet connection.                                */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Arial, sans-serif;
+  --font-mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+
+  /* --- Font sizes (mobile values; scaled up in section 7) -------------- */
+  --fs-display: 24px;
+  --fs-h1: 20px;
+  --fs-h2: 18px;
+  --fs-h3: 15px;
+  --fs-body-lg: 16px;
+  --fs-body: 14px;
+  --fs-small: 12px;
+  --fs-label: 11px;
+
+  /* --- Line heights (aligned to the 4px vertical rhythm) --------------- */
+  --lh-display: 32px;
+  --lh-h1: 28px;
+  --lh-h2: 24px;
+  --lh-h3: 20px;
+  --lh-body-lg: 24px;
+  --lh-body: 20px;
+  --lh-small: 16px;
+  --lh-label: 14px;
+
+  /* --- Letter spacing --------------------------------------------------- */
+  --ls-display: -0.01em;
+  --ls-h1: -0.01em;
+  --ls-label: 0.02em;
+
+  /* --- Font weights ----------------------------------------------------- */
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+
+  /* --- Structure constants ---------------------------------------------- */
+  --radius: 0px;         /* every corner is sharp                */
+  --border: 1px;         /* standard structural border           */
+  --border-strong: 2px;  /* focus ring, modal outline            */
+  --duration: 150ms;     /* standard interaction transition      */
+
+  /* --- Layering --------------------------------------------------------- */
+  --z-overlay: 90;  /* backdrop behind the mobile drawer */
+  --z-drawer: 100;  /* the sliding side navigation       */
+  --z-modal: 200;   /* dialogs above everything else     */
+}
+
+
+/* ==========================================================================
+   2. Design tokens — colour
+   --------------------------------------------------------------------------
+   ALL colour values for the project live in this section, and nowhere else.
+   To change the whole site's look, change these declarations only.
+
+   Final approved brand palette:
+     Mocha Mousse   #a47864  — brand accent: decorative fills, borders,
+                               icons and chart elements
+     Ethereal Blue  #add4e0  — informational surfaces and highlights
+     Moonlit Grey   #f2f0ea  — page canvas
+   Supporting neutrals (approved) plus --color-accent-strong (#7a5644), the
+   darker Mocha shade that is safe for small text and button labels.
+   ========================================================================== */
+
+:root {
+  /* --- Surfaces -------------------------------------------------------- */
+  --color-canvas: #f2f0ea;        /* Moonlit Grey: page background       */
+  --color-surface: #ffffff;       /* cards, panels, inputs, table body   */
+  --color-surface-alt: #ebe7de;   /* table headers, zebra rows, disabled */
+  --color-tint: #add4e0;          /* Ethereal Blue: highlight surfaces   */
+
+  /* --- Text and icons --------------------------------------------------- */
+  --color-ink: #2a2321;           /* headings and body text              */
+  --color-ink-muted: #6b5f57;     /* secondary labels, meta, placeholder */
+
+  /* --- Lines and borders ------------------------------------------------ */
+  --color-line: #d5cfc4;          /* default 1px borders and dividers    */
+  --color-line-strong: #8b8175;   /* input borders, emphasis outlines    */
+
+  /* --- Brand accent ----------------------------------------------------- */
+  --color-accent: #a47864;        /* Mocha Mousse: decorative fills and
+                                     large accents (3.4:1 on canvas, so it
+                                     is never used for small text)        */
+  --color-accent-strong: #7a5644; /* accessible Mocha: primary button
+                                     fills and small accent text
+                                     (6.5:1 on canvas)                    */
+
+  /* --- Text colours for filled surfaces ---------------------------------- */
+  --color-on-accent: #ffffff;     /* label on --color-accent-strong      */
+  --color-on-tint: #2a2321;       /* text on Ethereal Blue (8.9:1)       */
+
+  /* --- Interaction ------------------------------------------------------- */
+  --color-focus: #7a5644;         /* 2px focus-visible outline           */
+}
+
+
+/* ==========================================================================
+   2b. Wireframe palette — documentation only, not active
+   --------------------------------------------------------------------------
+   The approved Stitch wireframes are grayscale. The declarations below
+   reproduce that wireframe stage using the same token names, so the project
+   report can show a before/after comparison.
+
+   To preview the wireframe look: comment out the brand values in section 2
+   and uncomment the corresponding declarations below (or copy this whole
+   :root block over section 2, then undo with Git).
+
+   :root {
+     --color-canvas: #ffffff;
+     --color-surface: #ffffff;
+     --color-surface-alt: #e2e4e8;
+     --color-tint: #f4f5f7;
+     --color-ink: #121212;
+     --color-ink-muted: #5a5d62;
+     --color-line: #e2e4e8;
+     --color-line-strong: #8c9097;
+     --color-accent: #121212;
+     --color-accent-strong: #121212;
+     --color-on-accent: #ffffff;
+     --color-on-tint: #121212;
+     --color-focus: #121212;
+   }
+   ========================================================================== */
+
+
+/* ==========================================================================
+   3. Reset
+   --------------------------------------------------------------------------
+   A short, modern reset so spacing and sizing behave the same in every
+   browser. Nothing here is visual design — only predictability.
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body,
+h1,
+h2,
+h3,
+h4,
+p,
+figure,
+blockquote,
+dl,
+dd {
+  margin: 0;
+}
+
+/* Lists are used for navigation and card lists, never as bulleted prose. */
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+img,
+svg,
+video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Form controls must inherit the page font instead of the browser default. */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* Links are styled per component in later milestones (e.g. a .link class). */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+
+/* ==========================================================================
+   4. Page base
+   --------------------------------------------------------------------------
+   Sets the canvas colour, the default text colour and the base font size of
+   the document. Everything else builds on these three decisions.
+   ========================================================================== */
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body-lg);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-body-lg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+
+/* ==========================================================================
+   5. Typography
+   --------------------------------------------------------------------------
+   Headings and paragraphs use the token scale directly. The utility classes
+   at the end of this section are the small set of text styles that pages and
+   components will reuse.
+   ========================================================================== */
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: var(--fw-semibold);
+  color: var(--color-ink);
+}
+
+h1 {
+  font-size: var(--fs-display);
+  line-height: var(--lh-display);
+  letter-spacing: var(--ls-display);
+}
+
+h2 {
+  font-size: var(--fs-h1);
+  line-height: var(--lh-h1);
+  letter-spacing: var(--ls-h1);
+}
+
+h3 {
+  font-size: var(--fs-h2);
+  line-height: var(--lh-h2);
+}
+
+h4 {
+  font-size: var(--fs-h3);
+  line-height: var(--lh-h3);
+}
+
+p {
+  font-size: var(--fs-body-lg);
+  line-height: var(--lh-body-lg);
+}
+
+small {
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+}
+
+strong {
+  font-weight: var(--fw-semibold);
+}
+
+/* --- Text utilities ---------------------------------------------------- */
+
+/* Large page-level title. */
+.text-display {
+  font-size: var(--fs-display);
+  line-height: var(--lh-display);
+  letter-spacing: var(--ls-display);
+  font-weight: var(--fw-semibold);
+}
+
+/* Normal body copy, slightly smaller than the default paragraph size. */
+.text-body {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+/* Smaller supporting copy. */
+.text-small {
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+}
+
+/* Uppercase technical label: badges, table headers and filter chips. */
+.text-label {
+  font-size: var(--fs-label);
+  line-height: var(--lh-label);
+  letter-spacing: var(--ls-label);
+  font-weight: var(--fw-medium);
+  text-transform: uppercase;
+}
+
+/* Secondary, less important text. */
+.text-muted {
+  color: var(--color-ink-muted);
+}
+
+/* Monospace text for metrics and technical keys. */
+.text-mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+}
+
+/* Numbers that must line up in columns (table cells, chart values). */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* ==========================================================================
+   6. Focus, selection, motion
+   --------------------------------------------------------------------------
+   Keyboard users must always be able to see where they are. The 2px outline
+   mirrors the wireframe's 2px focus border and only appears for keyboard
+   navigation (not mouse clicks), thanks to :focus-visible.
+   ========================================================================== */
+
+:focus-visible {
+  outline: var(--border-strong) solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+::selection {
+  background-color: var(--color-tint);
+  color: var(--color-on-tint);
+}
+
+/* Respect the operating system's reduced-motion setting. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+
+/* ==========================================================================
+   7. Responsive token overrides
+   --------------------------------------------------------------------------
+   Mobile-first: the base rules above describe the mobile layout. Only two
+   breakpoints exist, as required by the project brief.
+
+     Mobile  : below 768px  — 4 columns, 16px gutter, 16px margins
+     Tablet  : 768px+       — 8 columns, 16px gutter, 24px margins
+     Desktop : 1024px+      — 12 columns, 24px gutter, 40px margins,
+                              plus the persistent 240px sidebar
+   ========================================================================== */
+
+/* --- Tablet: 768px and above ------------------------------------------ */
+@media (min-width: 768px) {
+  :root {
+    --gutter: 16px;
+    --page-margin: 24px;
+
+    --fs-h1: 22px;
+    --lh-h1: 28px;
+  }
+}
+
+/* --- Desktop: 1024px and above ---------------------------------------- */
+@media (min-width: 1024px) {
+  :root {
+    --gutter: 24px;
+    --page-margin: 40px;
+
+    --fs-display: 32px;
+    --lh-display: 40px;
+    --ls-display: -0.02em;
+
+    --fs-h1: 24px;
+    --lh-h1: 32px;
+
+    --fs-h2: 20px;
+    --lh-h2: 28px;
+  }
+}
