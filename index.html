@@ -115,16 +115,168 @@
       </aside>
 
       <main class="page" id="main-content">
-        <h1>Dashboard</h1>
-        <p class="text-muted">
-          The dashboard content is added in a later milestone.
-        </p>
+        <!-- The dashboard is filled in by the dashboard module in js/app.js.
+             Everything below is real markup; only the numbers, table rows and
+             deadline rows are written by JavaScript. -->
+        <div class="dashboard" id="dashboard">
+          <!-- 1. Welcome -------------------------------------------------- -->
+          <section class="welcome" aria-labelledby="welcome-title">
+            <h1 class="welcome__title" id="welcome-title">
+              Your career journey, in one place.
+            </h1>
+
+            <p class="welcome__text">
+              Keep track of the opportunities you have saved, the applications
+              you have sent and the deadlines that are coming up next.
+            </p>
+
+            <p class="text-small text-muted">
+              Sample data — saved in this browser only. Nothing here is live.
+            </p>
+
+            <div class="btn-group welcome__actions">
+              <a class="btn btn--primary" href="explore.html"
+                >Explore opportunities</a
+              >
+            </div>
+          </section>
+
+          <!-- 2. Overview cards ------------------------------------------- -->
+          <section aria-labelledby="overview-title">
+            <div class="section-head">
+              <h2 class="section-head__title" id="overview-title">
+                Overview
+              </h2>
+            </div>
+
+            <ul class="stat-grid">
+              <li class="card stat">
+                <p class="stat__label text-label">Total applications</p>
+                <p class="stat__value num" id="stat-applications">0</p>
+                <p class="stat__note text-small text-muted">
+                  Every application you have tracked
+                </p>
+              </li>
+
+              <li class="card stat">
+                <p class="stat__label text-label">Interviews</p>
+                <p class="stat__value num" id="stat-interviews">0</p>
+                <p class="stat__note text-small text-muted">
+                  Applications currently at interview stage
+                </p>
+              </li>
+
+              <li class="card stat">
+                <p class="stat__label text-label">Saved opportunities</p>
+                <p class="stat__value num" id="stat-saved">0</p>
+                <p class="stat__note text-small text-muted">
+                  Opportunities kept for later
+                </p>
+              </li>
+
+              <li class="card stat">
+                <p class="stat__label text-label">Upcoming deadlines</p>
+                <p class="stat__value num" id="stat-deadlines">0</p>
+                <p class="stat__note text-small text-muted">
+                  Closing in the next 30 days
+                </p>
+              </li>
+            </ul>
+          </section>
+
+          <div class="dash-columns">
+            <!-- 3. Recent applications ---------------------------------- -->
+            <section aria-labelledby="recent-applications-title">
+              <div class="section-head">
+                <h2
+                  class="section-head__title"
+                  id="recent-applications-title"
+                >
+                  Recent applications
+                </h2>
+                <a class="section-head__link" href="applications.html"
+                  >View all</a
+                >
+              </div>
+
+              <div class="table-wrap" id="recent-applications-wrap">
+                <table class="table table--compact">
+                  <caption class="table__caption">
+                    Your five most recent applications, newest first.
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Opportunity</th>
+                      <th scope="col">Company</th>
+                      <th scope="col" class="table__num">Applied</th>
+                      <th scope="col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="recent-applications-body"></tbody>
+                </table>
+              </div>
+
+              <div class="empty" id="recent-applications-empty" hidden>
+                <h3 class="empty__title">No applications yet</h3>
+                <p class="empty__text">
+                  When you start applying, your applications will appear here
+                  with their current status.
+                </p>
+                <a class="btn btn--secondary" href="explore.html"
+                  >Find an opportunity</a
+                >
+              </div>
+            </section>
+
+            <!-- 4. Upcoming deadlines ------------------------------------ -->
+            <section aria-labelledby="deadlines-title">
+              <div class="section-head">
+                <h2 class="section-head__title" id="deadlines-title">
+                  Upcoming deadlines
+                </h2>
+                <span class="text-small text-muted">Next 30 days</span>
+              </div>
+
+              <ul class="deadline-list" id="deadline-list"></ul>
+
+              <div class="empty" id="deadlines-empty" hidden>
+                <h3 class="empty__title">Nothing closing soon</h3>
+                <p class="empty__text">
+                  No opportunities close in the next 30 days. New deadlines
+                  will show up here.
+                </p>
+              </div>
+            </section>
+          </div>
+
+          <!-- 5. Quick actions ------------------------------------------- -->
+          <section aria-labelledby="quick-actions-title">
+            <div class="section-head">
+              <h2 class="section-head__title" id="quick-actions-title">
+                Quick actions
+              </h2>
+            </div>
+
+            <div class="btn-group">
+              <a class="btn btn--secondary" href="explore.html"
+                >Explore opportunities</a
+              >
+              <a class="btn btn--secondary" href="applications.html"
+                >View applications</a
+              >
+              <a class="btn btn--secondary" href="bookmarks.html"
+                >View bookmarks</a
+              >
+            </div>
+          </section>
+        </div>
       </main>
     </div>
 
     <!-- Dimmed backdrop for the open drawer; clicking it closes the drawer. -->
     <div class="overlay" data-overlay></div>
 
+    <script src="js/data.js" defer></script>
     <script src="js/app.js" defer></script>
   </body>
 </html>

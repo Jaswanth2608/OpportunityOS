@@ -164,3 +164,280 @@
 
   window.addEventListener("resize", handleResize);
 })();
+
+
+/* ==========================================================================
+   OpportunityOS — dashboard
+   --------------------------------------------------------------------------
+   This block only runs on the Dashboard page: it looks for #dashboard and
+   stops immediately on the other four pages, so it never interferes with the
+   navigation code above.
+
+   It reads the sample data from js/data.js and writes three things into the
+   page: the four overview numbers, the recent applications table, and the
+   upcoming deadline list. Everything is built from the data, so the page can
+   never show a number that disagrees with the rows underneath it.
+   ========================================================================== */
+
+(function () {
+  "use strict";
+
+  /* --- Only run on the dashboard ---------------------------------------- */
+  var dashboard = document.getElementById("dashboard");
+  if (!dashboard) {
+    return;
+  }
+
+  var sampleData = window.OpportunityOS_DATA;
+  if (!sampleData) {
+    return;
+  }
+
+  var opportunities = sampleData.opportunities || [];
+  var applications = sampleData.applications || [];
+
+  /* --- Settings --------------------------------------------------------- */
+  var DEADLINE_WINDOW_DAYS = 30; /* "upcoming" means within 30 days   */
+  var URGENT_WINDOW_DAYS = 7; /* deadlines this close get highlighted */
+  var RECENT_APPLICATION_LIMIT = 5;
+  var MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+  /* One central place that maps an application status to a badge style.
+     Change it here and the table, and any later page, follows. */
+  var STATUS_BADGES = {
+    Applied: "badge--neutral",
+    "Under review": "badge--neutral",
+    Interview: "badge--info",
+    Offer: "badge--accent",
+    Rejected: "badge--strong"
+  };
+  var DEFAULT_STATUS_BADGE = "badge--neutral";
+
+  /* --- Dates ------------------------------------------------------------ */
+
+  /* A date without a time, so comparisons ignore the clock. */
+  function today() {
+    var now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }
+
+  /* Turns "2026-11-20" into a Date in local time. */
+  function parseIsoDate(isoDate) {
+    var parts = isoDate.split("-");
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  }
+
+  /* Whole days between today and the given date.
+     0 = today, 3 = in three days, -2 = two days ago. */
+  function daysUntil(isoDate) {
+    return Math.round((parseIsoDate(isoDate) - today()) / MS_PER_DAY);
+  }
+
+  /* Readable date, for example "20 Nov 2026". */
+  var dateFormatter = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  });
+
+  function formatDate(isoDate) {
+    return dateFormatter.format(parseIsoDate(isoDate));
+  }
+
+  /* Friendly countdown, for example "In 3 days" or "Today". */
+  function formatCountdown(days) {
+    if (days === 0) {
+      return "Today";
+    }
+    if (days === 1) {
+      return "Tomorrow";
+    }
+    return "In " + days + " days";
+  }
+
+  /* --- Calculations ------------------------------------------------------ */
+
+  function countInterviews() {
+    return applications.filter(function (application) {
+      return application.status === "Interview";
+    }).length;
+  }
+
+  function countSaved() {
+    return opportunities.filter(function (opportunity) {
+      return opportunity.saved === true;
+    }).length;
+  }
+
+  /* Upcoming means: not expired (0 days or more) and within the window.
+     The list is sorted so the nearest deadline is always first. */
+  function getUpcomingDeadlines() {
+    return opportunities
+      .filter(function (opportunity) {
+        var days = daysUntil(opportunity.deadline);
+        return days >= 0 && days <= DEADLINE_WINDOW_DAYS;
+      })
+      .sort(function (a, b) {
+        return parseIsoDate(a.deadline) - parseIsoDate(b.deadline);
+      });
+  }
+
+  /* --- Small DOM helpers -------------------------------------------------- */
+
+  function createElement(tagName, className, text) {
+    var element = document.createElement(tagName);
+    if (className) {
+      element.className = className;
+    }
+    if (text !== undefined) {
+      element.textContent = text;
+    }
+    return element;
+  }
+
+  function setText(id, value) {
+    var element = document.getElementById(id);
+    if (element) {
+      element.textContent = value;
+    }
+  }
+
+  /* --- 1. Overview numbers ------------------------------------------------ */
+
+  function renderStats(deadlineCount) {
+    setText("stat-applications", applications.length);
+    setText("stat-interviews", countInterviews());
+    setText("stat-saved", countSaved());
+    setText("stat-deadlines", deadlineCount);
+  }
+
+  /* --- 2. Recent applications --------------------------------------------- */
+
+  function renderApplications() {
+    var tableWrapper = document.getElementById("recent-applications-wrap");
+    var tableBody = document.getElementById("recent-applications-body");
+    var emptyState = document.getElementById("recent-applications-empty");
+
+    if (!tableWrapper || !tableBody || !emptyState) {
+      return;
+    }
+
+    /* Newest first, then trimmed to the five most recent. */
+    var recent = applications
+      .slice()
+      .sort(function (a, b) {
+        return parseIsoDate(b.appliedOn) - parseIsoDate(a.appliedOn);
+      })
+      .slice(0, RECENT_APPLICATION_LIMIT);
+
+    tableBody.textContent = "";
+
+    if (recent.length === 0) {
+      tableWrapper.hidden = true;
+      emptyState.hidden = false;
+      return;
+    }
+
+    tableWrapper.hidden = false;
+    emptyState.hidden = true;
+
+    recent.forEach(function (application) {
+      var row = document.createElement("tr");
+
+      row.appendChild(createElement("td", "", application.title));
+      row.appendChild(createElement("td", "", application.company));
+      row.appendChild(
+        createElement("td", "table__num", formatDate(application.appliedOn))
+      );
+
+      /* Status is shown as a badge, always with its text so the meaning is
+         never carried by colour alone. */
+      var statusCell = document.createElement("td");
+      var badgeClass =
+        STATUS_BADGES[application.status] || DEFAULT_STATUS_BADGE;
+      statusCell.appendChild(
+        createElement("span", "badge " + badgeClass, application.status)
+      );
+      row.appendChild(statusCell);
+
+      tableBody.appendChild(row);
+    });
+  }
+
+  /* --- 3. Upcoming deadlines ---------------------------------------------- */
+
+  function renderDeadlines(deadlines) {
+    var list = document.getElementById("deadline-list");
+    var emptyState = document.getElementById("deadlines-empty");
+
+    if (!list || !emptyState) {
+      return;
+    }
+
+    list.textContent = "";
+
+    if (deadlines.length === 0) {
+      list.hidden = true;
+      emptyState.hidden = false;
+      return;
+    }
+
+    list.hidden = false;
+    emptyState.hidden = true;
+
+    deadlines.forEach(function (opportunity) {
+      var days = daysUntil(opportunity.deadline);
+      var isUrgent = days <= URGENT_WINDOW_DAYS;
+
+      var item = createElement(
+        "li",
+        "deadline" + (isUrgent ? " deadline--urgent" : "")
+      );
+
+      var main = createElement("div", "deadline__main");
+      main.appendChild(createElement("p", "deadline__title", opportunity.title));
+      main.appendChild(
+        createElement(
+          "p",
+          "deadline__meta",
+          opportunity.organisation + " \u00b7 " + opportunity.type
+        )
+      );
+
+      var dateBlock = createElement("div", "deadline__date");
+
+      /* A real <time> element with a machine-readable date. */
+      var time = createElement("time", "", formatDate(opportunity.deadline));
+      time.setAttribute("datetime", opportunity.deadline);
+      dateBlock.appendChild(time);
+      dateBlock.appendChild(
+        createElement(
+          "span",
+          "deadline__countdown",
+          isUrgent ? "Closing soon \u00b7 " + formatCountdown(days) : formatCountdown(days)
+        )
+      );
+
+      item.appendChild(main);
+      item.appendChild(dateBlock);
+      list.appendChild(item);
+    });
+  }
+
+  /* --- 4. Draw everything -------------------------------------------------- */
+
+  function renderDashboard() {
+    var deadlines = getUpcomingDeadlines();
+    renderStats(deadlines.length);
+    renderApplications();
+    renderDeadlines(deadlines);
+  }
+
+  /* A small hook so the renderer can be re-run later (for example once
+     bookmarks and applications are editable) and so the empty state can be
+     checked from the browser console while developing. */
+  window.OpportunityOS = window.OpportunityOS || {};
+  window.OpportunityOS.renderDashboard = renderDashboard;
+
+  renderDashboard();
+})();

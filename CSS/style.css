@@ -17,6 +17,8 @@
      9. Responsive shell behaviour  (drawer below 1024px, fixed sidebar above)
     10. UI components              (buttons, badges, chips, forms, cards,
                                     tables, empty states, placeholders, modal)
+    11. Dashboard                  (welcome block, stat grid, columns,
+                                    deadline rows)
 
    Important rules for later milestones:
      * Never write a colour value (hex, rgb, hsl) outside section 2.
@@ -547,15 +549,19 @@ strong {
   /* While closed the panel must never catch a click, even for the brief
      moment it is still sliding out. */
   pointer-events: none;
+  /* visibility is delayed when closing, so the slide-out stays visible, but
+     it is never interpolated: that keeps the panel focusable the instant it
+     opens, which js/app.js relies on when it moves focus into the drawer. */
   transition: transform var(--duration) ease-out,
-    visibility var(--duration) ease-out;
+    visibility 0s linear var(--duration);
 }
 
-/* `drawer-open` is added to <body> by js/app.js. */
+/* `drawer-open` is added to <body> by js/app.js. Showing is immediate. */
 body.drawer-open .sidebar {
   transform: translateX(0);
   visibility: visible;
   pointer-events: auto;
+  transition: transform var(--duration) ease-out, visibility 0s;
 }
 
 /* Stop the page behind the drawer from scrolling while it is open. */
@@ -1475,3 +1481,227 @@ body.drawer-open .overlay {
 
 /* The footer already wraps, so the buttons stack naturally on a narrow phone
    without needing a desktop-first media query. */
+
+
+/* ==========================================================================
+   11. Dashboard
+   --------------------------------------------------------------------------
+   Layout for index.html only. The look of the individual pieces (cards,
+   tables, badges, buttons) still comes from section 10; this section adds the
+   page's own grid and a few small text blocks.
+
+   Mobile first: one column everywhere, two stats per row from 768px, four
+   stats per row and a two-column content area from 1024px.
+   ========================================================================== */
+
+/* The whole dashboard: a vertical stack of sections with even spacing. */
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-width: var(--container-max);
+}
+
+/* --- Welcome block ---------------------------------------------------- */
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-bottom: var(--space-5);
+  border-bottom: var(--border) solid var(--color-line);
+}
+
+.welcome__title {
+  max-width: 22ch;
+  color: var(--color-ink);
+}
+
+.welcome__text {
+  max-width: 62ch;
+  font-size: var(--fs-body-lg);
+  line-height: var(--lh-body-lg);
+  color: var(--color-ink-muted);
+}
+
+.welcome__actions {
+  margin-top: var(--space-3);
+}
+
+/* --- Section headings ------------------------------------------------- */
+
+/* One row: title on the left, an optional quiet link or note on the right. */
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border) solid var(--color-line);
+}
+
+.section-head__title {
+  font-size: var(--fs-h2);
+  line-height: var(--lh-h2);
+  font-weight: var(--fw-semibold);
+  color: var(--color-ink);
+}
+
+/* "View all" style link: accessible Mocha, underlined so it is obvious. */
+.section-head__link {
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+  font-weight: var(--fw-medium);
+  color: var(--color-accent-strong);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.section-head__link:hover {
+  color: var(--color-ink);
+}
+
+/* --- Stat tiles ------------------------------------------------------- */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+/* .card.stat so this padding wins over the card default without !important. */
+.card.stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+
+.stat__label {
+  color: var(--color-ink-muted);
+}
+
+.stat__value {
+  font-size: var(--fs-display);
+  line-height: var(--lh-display);
+  font-weight: var(--fw-semibold);
+  color: var(--color-ink);
+}
+
+/* Pushes the caption to the bottom so all four tiles line up. */
+.stat__note {
+  margin-top: auto;
+}
+
+/* --- Two-column content area ------------------------------------------ */
+
+.dash-columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-6);
+}
+
+/* Grid items default to min-width: auto, which lets a wide table push its
+   column wider than the screen. min-width: 0 lets the table scroll inside its
+   own .table-wrap instead of widening the page. */
+.dash-columns > * {
+  min-width: 0;
+}
+
+/* --- Deadline rows ---------------------------------------------------- */
+
+.deadline-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.deadline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: var(--border) solid var(--color-line);
+  background-color: var(--color-surface);
+}
+
+.deadline__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.deadline__title {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-medium);
+  color: var(--color-ink);
+}
+
+.deadline__meta {
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+  color: var(--color-ink-muted);
+}
+
+.deadline__date {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+  color: var(--color-ink-muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Urgent rows are marked with a Mocha edge and a stronger countdown, not a
+   second colour. A 3.4:1 accent used as a decorative edge is fine. */
+.deadline--urgent {
+  border-left: var(--border-strong) solid var(--color-accent);
+}
+
+.deadline--urgent .deadline__date {
+  color: var(--color-accent-strong);
+  font-weight: var(--fw-medium);
+}
+
+/* --- Table caption ---------------------------------------------------- */
+
+/* The caption explains the table for screen readers; it is styled as quiet
+   supporting text rather than a headline. */
+.table__caption {
+  padding: var(--space-3) var(--space-4) 0;
+  text-align: left;
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+  color: var(--color-ink-muted);
+}
+
+/* --- Breakpoints ------------------------------------------------------ */
+
+/* Tablet: two stats per row. */
+@media (min-width: 768px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Desktop: four stats per row, and applications beside deadlines. */
+@media (min-width: 1024px) {
+  .stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .dash-columns {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+}
