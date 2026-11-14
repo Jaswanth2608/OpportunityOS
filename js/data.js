@@ -29,8 +29,11 @@
   }
 
   /* --- Opportunities ----------------------------------------------------
+     type     : exactly one of "Internship", "Job", "Hackathon"
+     mode     : exactly one of "Remote", "On-site", "Hybrid"
      deadline : ISO date string (YYYY-MM-DD) — easier to compare and sort
-     saved    : sample starting value for the bookmarks count
+     saved    : the starting bookmark state, used only to seed the bookmark
+                store the first time the site runs in a browser
      ---------------------------------------------------------------------- */
   var opportunities = [
     {
@@ -49,7 +52,7 @@
       id: "opp-2",
       title: "Data Analyst Placement",
       organisation: "Meridian Health",
-      type: "Graduate scheme",
+      type: "Job",
       mode: "Hybrid",
       location: "Manchester",
       deadline: isoDateInDays(9),
@@ -71,21 +74,21 @@
     },
     {
       id: "opp-4",
-      title: "Women in Tech Scholarship",
-      organisation: "Iota Foundation",
-      type: "Scholarship",
+      title: "Campus Climate Hack",
+      organisation: "GreenGrid",
+      type: "Hackathon",
       mode: "Remote",
-      location: "Remote",
+      location: "Remote (UK)",
       deadline: isoDateInDays(18),
       saved: false,
       summary:
-        "Tuition support and mentoring for students entering technology careers."
+        "Weekend hackathon building tools for campus sustainability, with mentors from local energy teams."
     },
     {
       id: "opp-5",
       title: "UX Research Assistant",
       organisation: "University of Leeds",
-      type: "Part-time role",
+      type: "Job",
       mode: "On-site",
       location: "Leeds",
       deadline: isoDateInDays(24),
@@ -95,15 +98,15 @@
     },
     {
       id: "opp-6",
-      title: "Product Management Workshop",
-      organisation: "Launchpad",
-      type: "Workshop",
-      mode: "Online",
-      location: "Online",
+      title: "FinTech Build Weekend",
+      organisation: "Ledgerly",
+      type: "Hackathon",
+      mode: "Hybrid",
+      location: "London",
       deadline: isoDateInDays(29),
       saved: false,
       summary:
-        "Two-day introduction to discovery, roadmaps and writing a clear product brief."
+        "Two-day build weekend for student teams prototyping budgeting tools, with a hybrid kick-off in London."
     },
     {
       id: "opp-7",
@@ -121,7 +124,7 @@
       id: "opp-8",
       title: "Analytics Graduate Programme",
       organisation: "Halcyon Group",
-      type: "Graduate scheme",
+      type: "Job",
       mode: "On-site",
       location: "Bristol",
       deadline: isoDateInDays(75),

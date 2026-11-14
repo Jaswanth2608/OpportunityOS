@@ -19,6 +19,8 @@
                                     tables, empty states, placeholders, modal)
     11. Dashboard                  (welcome block, stat grid, columns,
                                     deadline rows)
+    12. Explore                    (filter bar, card grid, modal details,
+                                    bookmark toast)
 
    Important rules for later milestones:
      * Never write a colour value (hex, rgb, hsl) outside section 2.
@@ -549,19 +551,17 @@ strong {
   /* While closed the panel must never catch a click, even for the brief
      moment it is still sliding out. */
   pointer-events: none;
-  /* visibility is delayed when closing, so the slide-out stays visible, but
-     it is never interpolated: that keeps the panel focusable the instant it
-     opens, which js/app.js relies on when it moves focus into the drawer. */
-  transition: transform var(--duration) ease-out,
-    visibility 0s linear var(--duration);
+  /* Only the transform is animated. visibility flips immediately in both
+     directions so the panel is focusable the moment it opens, and its links
+     leave the tab order the moment it closes. */
+  transition: transform var(--duration) ease-out;
 }
 
-/* `drawer-open` is added to <body> by js/app.js. Showing is immediate. */
+/* `drawer-open` is added to <body> by js/app.js. */
 body.drawer-open .sidebar {
   transform: translateX(0);
   visibility: visible;
   pointer-events: auto;
-  transition: transform var(--duration) ease-out, visibility 0s;
 }
 
 /* Stop the page behind the drawer from scrolling while it is open. */
@@ -1703,5 +1703,231 @@ body.drawer-open .overlay {
 
   .dash-columns {
     grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+}
+
+
+/* ==========================================================================
+   12. Explore
+   --------------------------------------------------------------------------
+   Layout for explore.html only. Cards, chips, inputs, buttons, the modal and
+   the empty state all come from section 10; this section adds the filter bar,
+   the card grid, the modal detail list and the bookmark confirmation.
+
+   Mobile first: one column everywhere, two columns from 768px, three from
+   1024px.
+   ========================================================================== */
+
+.explore {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-width: var(--container-max);
+}
+
+/* --- Filter bar ------------------------------------------------------- */
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: var(--border) solid var(--color-line);
+  background-color: var(--color-surface);
+}
+
+.filters__title {
+  margin: 0;
+}
+
+.filters__row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+.filters__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.filters__group .field__label {
+  margin: 0;
+}
+
+/* The clear button sits on the left on phones and on the right once there is
+   room, matching the rest of the forms. */
+.filters__actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* --- Result count ----------------------------------------------------- */
+
+.result-count {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+  color: var(--color-ink-muted);
+}
+
+/* --- Opportunity cards ------------------------------------------------ */
+
+.opportunity-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+/* The grid is hidden with the hidden attribute when nothing matches. */
+.opportunity-grid[hidden] {
+  display: none;
+}
+
+/* Grid items default to min-width: auto; this keeps long words from widening
+   the page on small screens. */
+.opportunity-grid > * {
+  min-width: 0;
+}
+
+.opportunity-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+
+.opportunity-card .card__header {
+  align-items: flex-start;
+  margin-bottom: var(--space-1);
+  padding-bottom: var(--space-2);
+}
+
+.opportunity-card__org {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-medium);
+  color: var(--color-ink);
+}
+
+.opportunity-card__meta {
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+  color: var(--color-ink-muted);
+}
+
+.opportunity-card__summary {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--color-ink);
+}
+
+.opportunity-card__deadline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+  color: var(--color-ink-muted);
+}
+
+/* Pushes the two card actions to the bottom, so cards in a row line up. */
+.opportunity-card .card__footer {
+  margin-top: auto;
+  padding-top: var(--space-3);
+}
+
+/* A saved card's button is visibly different, not just announced. */
+.opportunity-card .btn[aria-pressed="true"] {
+  background-color: var(--color-tint);
+  border-color: var(--color-accent);
+  color: var(--color-on-tint);
+}
+
+/* --- Modal detail list ------------------------------------------------ */
+
+.details {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-4) 0 0;
+}
+
+.details dt {
+  font-size: var(--fs-label);
+  line-height: var(--lh-label);
+  letter-spacing: var(--ls-label);
+  font-weight: var(--fw-medium);
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.details dd {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--color-ink);
+}
+
+/* --- Bookmark confirmation ------------------------------------------- */
+
+/* Always in the DOM so screen readers announce changes; it only becomes
+   visible for a few seconds after a bookmark is added or removed. */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-5);
+  z-index: var(--z-modal);
+  max-width: calc(100% - var(--space-8));
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  border: var(--border) solid var(--color-accent-strong);
+  background-color: var(--color-ink);
+  color: var(--color-surface);
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+  text-align: center;
+  transform: translate(-50%, var(--space-2));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration), transform var(--duration);
+}
+
+.toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* --- Breakpoints ------------------------------------------------------ */
+
+@media (min-width: 768px) {
+  .filters__row {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+
+  .filters__actions {
+    justify-content: flex-end;
+  }
+
+  .opportunity-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .details {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
+
+  .details dd {
+    margin-bottom: 0;
+  }
+}
+
+@media (min-width: 1024px) {
+  .opportunity-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

@@ -167,6 +167,157 @@
 
 
 /* ==========================================================================
+   OpportunityOS — bookmark store (shared by Explore and the Dashboard)
+   --------------------------------------------------------------------------
+   Bookmarks are just opportunity IDs, kept in localStorage under one versioned
+   key. This block runs before the page modules so both Explore and the
+   Dashboard read the same list and therefore always agree.
+
+   Why only IDs? Storing IDs keeps a single source of truth for the opportunity
+   details (js/data.js) and stops old copies of records piling up in storage.
+   ========================================================================== */
+
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "opportunityos.bookmarks.v1";
+
+  /* The starting bookmarks: the records flagged saved: true in the sample
+     data. They are only used the first time, when the key does not exist yet. */
+  var sampleData = window.OpportunityOS_DATA || { opportunities: [] };
+  var seedIds = sampleData.opportunities
+    .filter(function (opportunity) {
+      return opportunity.saved === true;
+    })
+    .map(function (opportunity) {
+      return opportunity.id;
+    });
+
+  var ids = [];
+  var storageAvailable = checkStorage();
+
+  /* localStorage can be blocked (private mode, file:// restrictions). The
+     store still works for the session, it just cannot remember anything. */
+  function checkStorage() {
+    try {
+      var testKey = "opportunityos.storage-test";
+      window.localStorage.setItem(testKey, "1");
+      window.localStorage.removeItem(testKey);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /* Reads the saved IDs. Returns null when the key has never been written, so
+     the caller can tell "empty" apart from "not set up yet". */
+  function readIds() {
+    if (!storageAvailable) {
+      return null;
+    }
+
+    try {
+      var raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw === null) {
+        return null;
+      }
+
+      var parsed = JSON.parse(raw);
+      return Array.isArray(parsed)
+        ? parsed.filter(function (id) {
+            return typeof id === "string";
+          })
+        : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  /* Saves the current IDs. A failure here only costs persistence, never the
+     in-memory list, so the page keeps working. */
+  function writeIds() {
+    if (!storageAvailable) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
+    } catch (error) {
+      /* Ignore: the session copy in `ids` still works. */
+    }
+  }
+
+  /* Removes any repeated ID, so the store can never hold duplicates even if
+     something else once wrote to the same key. */
+  function withoutDuplicates(list) {
+    var unique = [];
+    list.forEach(function (id) {
+      if (unique.indexOf(id) === -1) {
+        unique.push(id);
+      }
+    });
+    return unique;
+  }
+
+  /* --- Start-up: seed once, never overwrite ----------------------------- */
+  var stored = readIds();
+
+  if (stored === null) {
+    /* First run in this browser: start from the sample saved flags. */
+    ids = withoutDuplicates(seedIds);
+    writeIds();
+  } else {
+    /* Existing bookmarks always win; they are never replaced by the seed. */
+    ids = withoutDuplicates(stored);
+  }
+
+  /* --- Public methods ---------------------------------------------------- */
+  function has(id) {
+    return ids.indexOf(id) !== -1;
+  }
+
+  function count() {
+    return ids.length;
+  }
+
+  /* Returns a copy, so callers cannot change the store by accident. */
+  function list() {
+    return ids.slice();
+  }
+
+  /* Adds or removes one ID and reports the new state:
+     true  = the opportunity is now bookmarked
+     false = the bookmark was removed */
+  function toggle(id) {
+    if (!id) {
+      return false;
+    }
+
+    var index = ids.indexOf(id);
+
+    if (index === -1) {
+      ids.push(id);
+      writeIds();
+      return true;
+    }
+
+    ids.splice(index, 1);
+    writeIds();
+    return false;
+  }
+
+  window.OpportunityOS = window.OpportunityOS || {};
+  window.OpportunityOS.bookmarks = {
+    storageKey: STORAGE_KEY,
+    has: has,
+    count: count,
+    list: list,
+    toggle: toggle
+  };
+})();
+
+
+/* ==========================================================================
    OpportunityOS — dashboard
    --------------------------------------------------------------------------
    This block only runs on the Dashboard page: it looks for #dashboard and
@@ -263,7 +414,14 @@
     }).length;
   }
 
+  /* Saved opportunities are read from the shared bookmark store, so the
+     dashboard and Explore always show the same number. If the store is
+     missing for any reason, fall back to the sample saved flags. */
   function countSaved() {
+    if (window.OpportunityOS && window.OpportunityOS.bookmarks) {
+      return window.OpportunityOS.bookmarks.count();
+    }
+
     return opportunities.filter(function (opportunity) {
       return opportunity.saved === true;
     }).length;
@@ -440,4 +598,514 @@
   window.OpportunityOS.renderDashboard = renderDashboard;
 
   renderDashboard();
+})();
+
+
+/* ==========================================================================
+   OpportunityOS — explore opportunities
+   --------------------------------------------------------------------------
+   This block only runs on explore.html (#explore). It filters the shared
+   sample dataset, draws the cards, opens the details modal and saves
+   bookmarks through the shared bookmark store above.
+
+   Filtering is kept in one small `state` object so the four controls can
+   never reset each other: every control changes one property and then calls
+   render() again.
+   ========================================================================== */
+
+(function () {
+  "use strict";
+
+  /* --- Only run on the Explore page -------------------------------------- */
+  var explore = document.getElementById("explore");
+  if (!explore) {
+    return;
+  }
+
+  var sampleData = window.OpportunityOS_DATA;
+  var bookmarks = window.OpportunityOS && window.OpportunityOS.bookmarks;
+
+  if (!sampleData || !bookmarks) {
+    return;
+  }
+
+  var opportunities = sampleData.opportunities || [];
+
+  /* --- Elements ---------------------------------------------------------- */
+  var filters = document.getElementById("filters");
+  var searchInput = document.getElementById("search-input");
+  var locationSelect = document.getElementById("location-select");
+  var typeGroup = document.querySelector('[data-filter-group="type"]');
+  var modeGroup = document.querySelector('[data-filter-group="mode"]');
+  var list = document.getElementById("opportunity-list");
+  var emptyState = document.getElementById("opportunities-empty");
+  var resultCount = document.getElementById("result-count");
+  var bookmarkStatus = document.getElementById("bookmark-status");
+  var clearButtons = document.querySelectorAll("[data-clear-filters]");
+
+  var modal = document.getElementById("opportunity-modal");
+  var modalTitle = document.getElementById("opportunity-modal-title");
+  var modalSummary = document.getElementById("opportunity-modal-summary");
+  var modalDetails = document.getElementById("opportunity-modal-details");
+
+  /* One badge style per opportunity type, in one place. */
+  var TYPE_BADGES = {
+    Internship: "badge--accent",
+    Job: "badge--info",
+    Hackathon: "badge--strong"
+  };
+
+  /* --- State ------------------------------------------------------------- */
+  var state = {
+    search: "",
+    type: "all",
+    mode: "all",
+    location: "all"
+  };
+
+  var lastFocusedElement = null;
+  var toastTimer = null;
+
+  /* --- Dates -------------------------------------------------------------
+     Small local helpers. The dashboard keeps its own copy so each page module
+     stays easy to read on its own. */
+  var MS_PER_DAY = 24 * 60 * 60 * 1000;
+  var dateFormatter = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  });
+
+  function parseIsoDate(isoDate) {
+    var parts = isoDate.split("-");
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  }
+
+  function today() {
+    var now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }
+
+  function formatDate(isoDate) {
+    return dateFormatter.format(parseIsoDate(isoDate));
+  }
+
+  function daysUntil(isoDate) {
+    return Math.round((parseIsoDate(isoDate) - today()) / MS_PER_DAY);
+  }
+
+  function countdownLabel(days) {
+    if (days < 0) {
+      return "Closed";
+    }
+    if (days === 0) {
+      return "today";
+    }
+    if (days === 1) {
+      return "tomorrow";
+    }
+    return "in " + days + " days";
+  }
+
+  /* --- Filtering --------------------------------------------------------- */
+
+  function matchesFilters(opportunity) {
+    var term = state.search.trim().toLowerCase();
+
+    /* Search covers both the title and the organisation. */
+    if (term) {
+      var searchable = (
+        opportunity.title +
+        " " +
+        opportunity.organisation
+      ).toLowerCase();
+
+      if (searchable.indexOf(term) === -1) {
+        return false;
+      }
+    }
+
+    if (state.type !== "all" && opportunity.type !== state.type) {
+      return false;
+    }
+
+    if (state.mode !== "all" && opportunity.mode !== state.mode) {
+      return false;
+    }
+
+    if (state.location !== "all" && opportunity.location !== state.location) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /* --- Card building ----------------------------------------------------- */
+
+  function createElement(tagName, className, text) {
+    var element = document.createElement(tagName);
+    if (className) {
+      element.className = className;
+    }
+    if (text !== undefined) {
+      element.textContent = text;
+    }
+    return element;
+  }
+
+  function buildCard(opportunity) {
+    var card = createElement("li", "card opportunity-card");
+
+    /* Header: title and type badge. */
+    var header = createElement("div", "card__header");
+    header.appendChild(createElement("h3", "card__title", opportunity.title));
+
+    var badgeClass = TYPE_BADGES[opportunity.type] || "badge--neutral";
+    header.appendChild(
+      createElement("span", "badge " + badgeClass, opportunity.type)
+    );
+    card.appendChild(header);
+
+    /* Organisation, mode and location. */
+    card.appendChild(
+      createElement("p", "opportunity-card__org", opportunity.organisation)
+    );
+    card.appendChild(
+      createElement(
+        "p",
+        "opportunity-card__meta",
+        opportunity.mode + " \u00b7 " + opportunity.location
+      )
+    );
+
+    /* Deadline with a machine-readable <time> element. */
+    var days = daysUntil(opportunity.deadline);
+    var deadline = createElement("p", "opportunity-card__deadline");
+    var time = createElement("time", "", formatDate(opportunity.deadline));
+    time.setAttribute("datetime", opportunity.deadline);
+    deadline.appendChild(document.createTextNode("Closes "));
+    deadline.appendChild(time);
+    deadline.appendChild(
+      document.createTextNode(" \u00b7 " + countdownLabel(days))
+    );
+    card.appendChild(deadline);
+
+    card.appendChild(
+      createElement("p", "opportunity-card__summary", opportunity.summary)
+    );
+
+    /* Footer: Save / Saved toggle and View details. */
+    var footer = createElement("div", "card__footer");
+    var isSaved = bookmarks.has(opportunity.id);
+
+    var saveButton = createElement(
+      "button",
+      "btn btn--secondary",
+      isSaved ? "Saved" : "Save"
+    );
+    saveButton.type = "button";
+    saveButton.setAttribute("aria-pressed", isSaved ? "true" : "false");
+    saveButton.setAttribute("data-action", "bookmark");
+    saveButton.setAttribute("data-id", opportunity.id);
+    footer.appendChild(saveButton);
+
+    var detailsButton = createElement(
+      "button",
+      "btn btn--tertiary",
+      "View details"
+    );
+    detailsButton.type = "button";
+    detailsButton.setAttribute("data-action", "details");
+    detailsButton.setAttribute("data-id", opportunity.id);
+    detailsButton.setAttribute(
+      "aria-label",
+      "View details for " + opportunity.title
+    );
+    footer.appendChild(detailsButton);
+
+    card.appendChild(footer);
+    return card;
+  }
+
+  /* --- Rendering --------------------------------------------------------- */
+
+  function render() {
+    var matches = opportunities.filter(matchesFilters);
+
+    list.textContent = "";
+    resultCount.textContent =
+      "Showing " +
+      matches.length +
+      " of " +
+      opportunities.length +
+      " sample opportunities";
+
+    if (matches.length === 0) {
+      list.hidden = true;
+      emptyState.hidden = false;
+      return;
+    }
+
+    list.hidden = false;
+    emptyState.hidden = true;
+
+    matches.forEach(function (opportunity) {
+      list.appendChild(buildCard(opportunity));
+    });
+  }
+
+  /* --- Bookmarking -------------------------------------------------------- */
+
+  function announce(message) {
+    if (!bookmarkStatus) {
+      return;
+    }
+
+    bookmarkStatus.textContent = message;
+    bookmarkStatus.classList.add("is-visible");
+
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(function () {
+      bookmarkStatus.classList.remove("is-visible");
+      bookmarkStatus.textContent = "";
+    }, 3000);
+  }
+
+  function toggleBookmark(opportunity, button) {
+    /* The store prevents duplicates and reports the new state. */
+    var isSaved = bookmarks.toggle(opportunity.id);
+
+    button.setAttribute("aria-pressed", isSaved ? "true" : "false");
+    button.textContent = isSaved ? "Saved" : "Save";
+
+    announce((isSaved ? "Saved " : "Removed ") + opportunity.title);
+  }
+
+  /* --- Details modal ------------------------------------------------------ */
+
+  function addDetail(label, value) {
+    modalDetails.appendChild(createElement("dt", "", label));
+    modalDetails.appendChild(createElement("dd", "", value));
+  }
+
+  function openModal(opportunity, trigger) {
+    lastFocusedElement = trigger || document.activeElement;
+
+    modalTitle.textContent = opportunity.title;
+    modalSummary.textContent = opportunity.summary;
+    modalDetails.textContent = "";
+
+    addDetail("Organisation", opportunity.organisation);
+    addDetail("Type", opportunity.type);
+    addDetail("Work mode", opportunity.mode);
+    addDetail("Location", opportunity.location);
+    addDetail("Deadline", formatDate(opportunity.deadline));
+    addDetail("Time left", countdownLabel(daysUntil(opportunity.deadline)));
+
+    modal.hidden = false;
+    document.addEventListener("keydown", handleModalKeydown);
+
+    /* Focus the close button so keyboard users start inside the dialog. */
+    var closeButton = modal.querySelector("[data-modal-close]");
+    if (closeButton) {
+      closeButton.focus();
+    }
+  }
+
+  function closeModal() {
+    if (modal.hidden) {
+      return;
+    }
+
+    modal.hidden = true;
+    document.removeEventListener("keydown", handleModalKeydown);
+
+    /* Return focus to the button that opened the dialog. */
+    if (lastFocusedElement && document.contains(lastFocusedElement)) {
+      lastFocusedElement.focus();
+    } else {
+      searchInput.focus();
+    }
+
+    lastFocusedElement = null;
+  }
+
+  function handleModalKeydown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeModal();
+      return;
+    }
+
+    /* Keep Tab inside the dialog while it is open. */
+    if (event.key !== "Tab") {
+      return;
+    }
+
+    var focusable = modal.querySelectorAll(
+      "button:not([disabled]), a[href], input, select, textarea"
+    );
+
+    if (focusable.length === 0) {
+      return;
+    }
+
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  /* --- Clearing ----------------------------------------------------------- */
+
+  function clearFilters() {
+    var focusWasInEmptyState = emptyState.contains(document.activeElement);
+
+    state.search = "";
+    state.type = "all";
+    state.mode = "all";
+    state.location = "all";
+
+    searchInput.value = "";
+    locationSelect.value = "all";
+
+    [typeGroup, modeGroup].forEach(function (group) {
+      if (!group) {
+        return;
+      }
+
+      Array.prototype.forEach.call(
+        group.querySelectorAll("button[data-value]"),
+        function (chip) {
+          var isAll = chip.getAttribute("data-value") === "all";
+          chip.setAttribute("aria-pressed", isAll ? "true" : "false");
+        }
+      );
+    });
+
+    render();
+
+    /* If the empty state's button is what was clicked, it is about to be
+       hidden, so move focus somewhere sensible instead of losing it. */
+    if (focusWasInEmptyState) {
+      searchInput.focus();
+    }
+  }
+
+  /* --- Wiring ------------------------------------------------------------- */
+
+  /* Location options come from the dataset, so they can never drift out of
+     date when the sample data changes. */
+  function fillLocations() {
+    var locations = [];
+
+    opportunities.forEach(function (opportunity) {
+      if (locations.indexOf(opportunity.location) === -1) {
+        locations.push(opportunity.location);
+      }
+    });
+
+    locations.sort();
+
+    locations.forEach(function (location) {
+      var option = document.createElement("option");
+      option.value = location;
+      option.textContent = location;
+      locationSelect.appendChild(option);
+    });
+  }
+
+  /* The form has no submit button, but pressing Enter in the search field can
+     still submit it; keep the page where it is. */
+  if (filters) {
+    filters.addEventListener("submit", function (event) {
+      event.preventDefault();
+    });
+  }
+
+  searchInput.addEventListener("input", function () {
+    state.search = searchInput.value;
+    render();
+  });
+
+  locationSelect.addEventListener("change", function () {
+    state.location = locationSelect.value;
+    render();
+  });
+
+  /* Each chip group updates only its own part of the state. */
+  [typeGroup, modeGroup].forEach(function (group) {
+    if (!group) {
+      return;
+    }
+
+    group.addEventListener("click", function (event) {
+      var chip = event.target.closest("button[data-value]");
+      if (!chip) {
+        return;
+      }
+
+      var key = group.getAttribute("data-filter-group");
+      if (!key) {
+        return;
+      }
+
+      state[key] = chip.getAttribute("data-value");
+
+      Array.prototype.forEach.call(
+        group.querySelectorAll("button[data-value]"),
+        function (item) {
+          item.setAttribute(
+            "aria-pressed",
+            item === chip ? "true" : "false"
+          );
+        }
+      );
+
+      render();
+    });
+  });
+
+  Array.prototype.forEach.call(clearButtons, function (button) {
+    button.addEventListener("click", clearFilters);
+  });
+
+  /* One listener on the list handles both card actions. */
+  list.addEventListener("click", function (event) {
+    var button = event.target.closest("button[data-action]");
+    if (!button) {
+      return;
+    }
+
+    var id = button.getAttribute("data-id");
+    var opportunity = opportunities.filter(function (item) {
+      return item.id === id;
+    })[0];
+
+    if (!opportunity) {
+      return;
+    }
+
+    if (button.getAttribute("data-action") === "bookmark") {
+      toggleBookmark(opportunity, button);
+    } else {
+      openModal(opportunity, button);
+    }
+  });
+
+  /* Close the modal with its buttons or the backdrop. */
+  modal.addEventListener("click", function (event) {
+    if (event.target.closest("[data-modal-close]") || event.target.closest("[data-modal-backdrop]")) {
+      closeModal();
+    }
+  });
+
+  fillLocations();
+  render();
 })();
