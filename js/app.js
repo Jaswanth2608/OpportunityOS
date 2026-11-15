@@ -318,6 +318,326 @@
 
 
 /* ==========================================================================
+   OpportunityOS — application statuses (shared by every page)
+   --------------------------------------------------------------------------
+   One map decides which statuses exist and which badge style each one uses.
+   The Dashboard and the My Applications page both read it, so the same
+   application can never look different on two pages.
+   ========================================================================== */
+
+(function () {
+  "use strict";
+
+  /* The five statuses, in the order they are offered in a dropdown. */
+  var STATUSES = ["Applied", "Under review", "Interview", "Offer", "Rejected"];
+
+  /* One badge style per status. The classes come from section 10.2 of the
+     stylesheet. */
+  var STATUS_BADGES = {
+    Applied: "badge--neutral",
+    "Under review": "badge--neutral",
+    Interview: "badge--info",
+    Offer: "badge--accent",
+    Rejected: "badge--strong"
+  };
+
+  function isValidStatus(status) {
+    return STATUSES.indexOf(status) !== -1;
+  }
+
+  function badgeClass(status) {
+    /* An unknown value falls back to the neutral badge instead of breaking. */
+    return STATUS_BADGES[status] || "badge--neutral";
+  }
+
+  window.OpportunityOS = window.OpportunityOS || {};
+  window.OpportunityOS.statuses = {
+    list: STATUSES.slice(),
+    isValid: isValidStatus,
+    badgeClass: badgeClass
+  };
+})();
+
+
+/* ==========================================================================
+   OpportunityOS — application store (shared by My Applications and Dashboard)
+   --------------------------------------------------------------------------
+   The user's applications live in localStorage under one versioned key, so a
+   status changed on the My Applications page is still there after a reload
+   and is what the Dashboard reads too.
+
+   The store is seeded from the sample applications in js/data.js the first
+   time the site runs in a browser, and never overwrites records the user has
+   since saved. If localStorage is unavailable (private mode, for example) the
+   store still works for the session and simply cannot remember anything.
+   ========================================================================== */
+
+(function () {
+  "use strict";
+
+  var statuses = window.OpportunityOS && window.OpportunityOS.statuses;
+  if (!statuses) {
+    return;
+  }
+
+  var STORAGE_KEY = "opportunityos.applications.v1";
+  var sampleData = window.OpportunityOS_DATA || { applications: [] };
+
+  var records = [];
+  var storageAvailable = checkStorage();
+  var lastIdTimestamp = 0;
+
+  function checkStorage() {
+    try {
+      var testKey = "opportunityos.storage-test";
+      window.localStorage.setItem(testKey, "1");
+      window.localStorage.removeItem(testKey);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /* --- Reading and writing --------------------------------------------- */
+
+  /* Turns anything from storage or from the form into a clean record, or null
+     when a required field is missing. Keeping this in one place means a
+     corrupt entry can never reach a page. */
+  function normalise(record) {
+    if (!record || typeof record !== "object") {
+      return null;
+    }
+
+    function text(value) {
+      return typeof value === "string" ? value.trim() : "";
+    }
+
+    var id = text(record.id);
+    var title = text(record.title);
+    var company = text(record.company);
+    var appliedOn = text(record.appliedOn);
+
+    if (!id || !title || !company) {
+      return null;
+    }
+
+    /* Dates are always stored as YYYY-MM-DD, which also sorts correctly as
+       plain text. */
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(appliedOn)) {
+      return null;
+    }
+
+    return {
+      id: id,
+      title: title,
+      company: company,
+      appliedOn: appliedOn,
+      status: statuses.isValid(record.status) ? record.status : "Applied"
+    };
+  }
+
+  /* Keeps the first record for each ID, so a doubled entry can never show up
+     twice in a list. */
+  function withoutDuplicateIds(list) {
+    var seen = [];
+    var unique = [];
+
+    list.forEach(function (record) {
+      if (!record || seen.indexOf(record.id) !== -1) {
+        return;
+      }
+
+      seen.push(record.id);
+      unique.push(record);
+    });
+
+    return unique;
+  }
+
+  function cleanRecords(input) {
+    if (!Array.isArray(input)) {
+      return [];
+    }
+
+    return withoutDuplicateIds(
+      input
+        .map(normalise)
+        .filter(function (record) {
+          return record !== null;
+        })
+    );
+  }
+
+  /* Returns null when the key has never been written, so start-up can tell
+     "not set up yet" apart from "the user removed every application". */
+  function readRecords() {
+    if (!storageAvailable) {
+      return null;
+    }
+
+    try {
+      var raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw === null) {
+        return null;
+      }
+
+      return cleanRecords(JSON.parse(raw));
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function writeRecords() {
+    if (!storageAvailable) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    } catch (error) {
+      /* Ignore: the session copy in `records` still works. */
+    }
+  }
+
+  /* --- Start-up: seed once, never overwrite ----------------------------- */
+
+  var stored = readRecords();
+
+  if (stored === null) {
+    /* First run in this browser: start from the sample applications. */
+    records = cleanRecords(sampleData.applications || []);
+    writeRecords();
+  } else {
+    /* Existing records always win; they are never replaced by the seed. */
+    records = stored;
+  }
+
+  /* --- Helpers ----------------------------------------------------------- */
+
+  /* Returns a copy, so callers cannot change the store by accident. */
+  function copy(record) {
+    return {
+      id: record.id,
+      title: record.title,
+      company: record.company,
+      appliedOn: record.appliedOn,
+      status: record.status
+    };
+  }
+
+  /* Titles and organisations are compared trimmed and case-insensitively, so
+     "Kestrel Labs " and "kestrel labs" count as the same employer. */
+  function sameText(first, second) {
+    return (
+      String(first).trim().toLowerCase() === String(second).trim().toLowerCase()
+    );
+  }
+
+  /* Two applications can be added within the same millisecond, so each new ID
+     is forced to be larger than the previous one. */
+  function nextId() {
+    var stamp = Date.now();
+
+    if (stamp <= lastIdTimestamp) {
+      stamp = lastIdTimestamp + 1;
+    }
+
+    lastIdTimestamp = stamp;
+    return "app-" + stamp;
+  }
+
+  /* --- Public methods ---------------------------------------------------- */
+
+  function list() {
+    return records.map(copy);
+  }
+
+  /* Returns the existing record with this title and organisation, or null. */
+  function findDuplicate(title, company) {
+    for (var index = 0; index < records.length; index += 1) {
+      if (
+        sameText(records[index].title, title) &&
+        sameText(records[index].company, company)
+      ) {
+        return copy(records[index]);
+      }
+    }
+
+    return null;
+  }
+
+  /* Returns { ok: true, application } or { ok: false, reason }, where reason is
+     "invalid" (a required field is missing) or "duplicate". */
+  function add(record) {
+    var source = record || {};
+    var candidate = normalise({
+      id: source.id || nextId(),
+      title: source.title,
+      company: source.company,
+      appliedOn: source.appliedOn,
+      status: source.status
+    });
+
+    if (!candidate) {
+      return { ok: false, reason: "invalid" };
+    }
+
+    if (findDuplicate(candidate.title, candidate.company)) {
+      return { ok: false, reason: "duplicate" };
+    }
+
+    records.push(candidate);
+    writeRecords();
+
+    return { ok: true, application: copy(candidate) };
+  }
+
+  /* Changes one record's status. An unknown ID or status is ignored and
+     reported as false. */
+  function setStatus(id, status) {
+    if (!statuses.isValid(status)) {
+      return false;
+    }
+
+    for (var index = 0; index < records.length; index += 1) {
+      if (records[index].id === id) {
+        records[index].status = status;
+        writeRecords();
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /* The total plus a count for every status, all at zero when there is
+     nothing to count. */
+  function countByStatus() {
+    var counts = { total: records.length };
+
+    statuses.list.forEach(function (status) {
+      counts[status] = 0;
+    });
+
+    records.forEach(function (record) {
+      counts[record.status] += 1;
+    });
+
+    return counts;
+  }
+
+  window.OpportunityOS.applications = {
+    storageKey: STORAGE_KEY,
+    list: list,
+    add: add,
+    setStatus: setStatus,
+    countByStatus: countByStatus,
+    findDuplicate: findDuplicate
+  };
+})();
+
+
+/* ==========================================================================
    OpportunityOS — dashboard
    --------------------------------------------------------------------------
    This block only runs on the Dashboard page: it looks for #dashboard and
@@ -345,7 +665,8 @@
   }
 
   var opportunities = sampleData.opportunities || [];
-  var applications = sampleData.applications || [];
+  var applicationStore = window.OpportunityOS && window.OpportunityOS.applications;
+  var statusMap = window.OpportunityOS && window.OpportunityOS.statuses;
 
   /* --- Settings --------------------------------------------------------- */
   var DEADLINE_WINDOW_DAYS = 30; /* "upcoming" means within 30 days   */
@@ -353,16 +674,24 @@
   var RECENT_APPLICATION_LIMIT = 5;
   var MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-  /* One central place that maps an application status to a badge style.
-     Change it here and the table, and any later page, follows. */
-  var STATUS_BADGES = {
-    Applied: "badge--neutral",
-    "Under review": "badge--neutral",
-    Interview: "badge--info",
-    Offer: "badge--accent",
-    Rejected: "badge--strong"
-  };
-  var DEFAULT_STATUS_BADGE = "badge--neutral";
+  /* --- Applications ------------------------------------------------------
+     Applications are always read from the shared store above, so a status
+     changed (or a row added) on the My Applications page shows up here as
+     soon as this page is opened or reloaded. The sample array is only a
+     fallback for the unlikely case that the store did not load. */
+  function getApplications() {
+    if (applicationStore) {
+      return applicationStore.list();
+    }
+
+    return sampleData.applications || [];
+  }
+
+  /* Badge styles come from the shared status map, so every page draws the
+     same status the same way. */
+  function badgeFor(status) {
+    return statusMap ? statusMap.badgeClass(status) : "badge--neutral";
+  }
 
   /* --- Dates ------------------------------------------------------------ */
 
@@ -409,7 +738,7 @@
   /* --- Calculations ------------------------------------------------------ */
 
   function countInterviews() {
-    return applications.filter(function (application) {
+    return getApplications().filter(function (application) {
       return application.status === "Interview";
     }).length;
   }
@@ -463,7 +792,7 @@
   /* --- 1. Overview numbers ------------------------------------------------ */
 
   function renderStats(deadlineCount) {
-    setText("stat-applications", applications.length);
+    setText("stat-applications", getApplications().length);
     setText("stat-interviews", countInterviews());
     setText("stat-saved", countSaved());
     setText("stat-deadlines", deadlineCount);
@@ -481,7 +810,7 @@
     }
 
     /* Newest first, then trimmed to the five most recent. */
-    var recent = applications
+    var recent = getApplications()
       .slice()
       .sort(function (a, b) {
         return parseIsoDate(b.appliedOn) - parseIsoDate(a.appliedOn);
@@ -511,8 +840,7 @@
       /* Status is shown as a badge, always with its text so the meaning is
          never carried by colour alone. */
       var statusCell = document.createElement("td");
-      var badgeClass =
-        STATUS_BADGES[application.status] || DEFAULT_STATUS_BADGE;
+      var badgeClass = badgeFor(application.status);
       statusCell.appendChild(
         createElement("span", "badge " + badgeClass, application.status)
       );
@@ -1107,5 +1435,656 @@
   });
 
   fillLocations();
+  render();
+})();
+
+
+/* ==========================================================================
+   OpportunityOS — my applications
+   --------------------------------------------------------------------------
+   This block only runs on applications.html (#applications).
+
+   It reads and writes through the shared application store above, so any
+   change made here is what the Dashboard shows. It draws:
+     1. The five overview numbers and the live count
+     2. One row per application, each with a status dropdown
+     3. The two empty states
+     4. The add-application dialog, with validation and duplicate prevention
+
+   Search and the status filter live in one `state` object, so changing one
+   never resets the other. Every control changes its own property, then calls
+   render() again.
+   ========================================================================== */
+
+(function () {
+  "use strict";
+
+  /* --- Only run on the My Applications page ------------------------------ */
+  var page = document.getElementById("applications");
+  if (!page) {
+    return;
+  }
+
+  var store = window.OpportunityOS && window.OpportunityOS.applications;
+  var statuses = window.OpportunityOS && window.OpportunityOS.statuses;
+
+  if (!store || !statuses) {
+    return;
+  }
+
+  /* --- Elements ---------------------------------------------------------- */
+  var list = document.getElementById("application-list");
+  var emptyState = document.getElementById("applications-empty");
+  var noMatchState = document.getElementById("applications-no-match");
+  var countLabel = document.getElementById("applications-count");
+  var resultCount = document.getElementById("applications-result-count");
+  var filtersForm = document.getElementById("application-filters");
+  var searchInput = document.getElementById("application-search");
+  var statusFilter = document.getElementById("status-filter");
+  var clearButtons = document.querySelectorAll(
+    "[data-clear-application-filters]"
+  );
+  var addButtons = document.querySelectorAll("[data-add-application]");
+
+  var modal = document.getElementById("add-application-modal");
+  var form = document.getElementById("add-application-form");
+  var formError = document.getElementById("application-form-error");
+  var titleInput = document.getElementById("application-title");
+  var titleError = document.getElementById("application-title-error");
+  var companyInput = document.getElementById("application-organisation");
+  var companyError = document.getElementById(
+    "application-organisation-error"
+  );
+  var dateInput = document.getElementById("application-date");
+  var dateError = document.getElementById("application-date-error");
+  var statusInput = document.getElementById("application-status");
+  var toast = document.getElementById("application-status-message");
+
+  /* Keyed by status, plus "total". */
+  var overviewNumbers = {
+    total: document.getElementById("overview-total"),
+    Applied: document.getElementById("overview-applied"),
+    Interview: document.getElementById("overview-interview"),
+    Offer: document.getElementById("overview-offer"),
+    Rejected: document.getElementById("overview-rejected")
+  };
+
+  /* Without the list and the dialog there is nothing to build. */
+  if (!list || !modal || !form || !emptyState || !noMatchState) {
+    return;
+  }
+
+  /* --- State ------------------------------------------------------------- */
+  var state = {
+    search: "",
+    status: "all"
+  };
+
+  var lastFocusedElement = null;
+  var toastTimer = null;
+
+  /* --- Dates -------------------------------------------------------------
+     Small local helpers, following the same pattern as the other modules. */
+  var dateFormatter = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  });
+
+  function parseIsoDate(isoDate) {
+    var parts = isoDate.split("-");
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  }
+
+  function formatDate(isoDate) {
+    return dateFormatter.format(parseIsoDate(isoDate));
+  }
+
+  /* Today as YYYY-MM-DD in the browser's own time zone, so the date field's
+     default matches the user's calendar. */
+  function isoToday() {
+    var now = new Date();
+    var month = String(now.getMonth() + 1).padStart(2, "0");
+    var day = String(now.getDate()).padStart(2, "0");
+    return now.getFullYear() + "-" + month + "-" + day;
+  }
+
+  /* --- Small DOM helpers -------------------------------------------------- */
+
+  function createElement(tagName, className, text) {
+    var element = document.createElement(tagName);
+    if (className) {
+      element.className = className;
+    }
+    if (text !== undefined) {
+      element.textContent = text;
+    }
+    return element;
+  }
+
+  /* --- Announcements ------------------------------------------------------
+     A short visible message that a screen reader also reads out politely. */
+
+  function announce(message) {
+    if (!toast) {
+      return;
+    }
+
+    toast.textContent = message;
+    toast.classList.add("is-visible");
+
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(function () {
+      toast.classList.remove("is-visible");
+      toast.textContent = "";
+    }, 3000);
+  }
+
+  /* --- Overview numbers and live count ------------------------------------ */
+
+  function renderOverview() {
+    var counts = store.countByStatus();
+
+    Object.keys(overviewNumbers).forEach(function (key) {
+      if (overviewNumbers[key]) {
+        overviewNumbers[key].textContent = counts[key];
+      }
+    });
+
+    if (countLabel) {
+      countLabel.textContent =
+        counts.total === 1
+          ? "1 application tracked"
+          : counts.total + " applications tracked";
+    }
+  }
+
+  /* --- Filtering ---------------------------------------------------------- */
+
+  function matchesFilters(application) {
+    var term = state.search.trim().toLowerCase();
+
+    /* Search covers both the title and the organisation. */
+    if (term) {
+      var searchable = (
+        application.title +
+        " " +
+        application.company
+      ).toLowerCase();
+
+      if (searchable.indexOf(term) === -1) {
+        return false;
+      }
+    }
+
+    if (state.status !== "all" && application.status !== state.status) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /* --- Rows ---------------------------------------------------------------
+     One row layout for every screen size: it stacks on phones and becomes
+     four columns at 768px (see section 13 of the stylesheet). */
+
+  function buildRow(application) {
+    var row = createElement("li", "application-row");
+
+    /* Column 1: title and organisation. */
+    var main = createElement("div", "application-row__main");
+    main.appendChild(
+      createElement("p", "application-row__title", application.title)
+    );
+    main.appendChild(
+      createElement("p", "application-row__org", application.company)
+    );
+    row.appendChild(main);
+
+    /* Column 2: the date, as a real <time> element. */
+    var dateBlock = createElement("p", "application-row__date");
+    dateBlock.appendChild(
+      createElement("span", "application-row__date-label", "Applied")
+    );
+    /* A space between the two, so a screen reader says "Applied 12 Nov 2026"
+       rather than running the words together. CSS ignores whitespace-only
+       children of a flex container, so the spacing stays the layout gap. */
+    dateBlock.appendChild(document.createTextNode(" "));
+
+    var time = createElement("time", "", formatDate(application.appliedOn));
+    time.setAttribute("datetime", application.appliedOn);
+    dateBlock.appendChild(time);
+    row.appendChild(dateBlock);
+
+    /* Column 3: the current status, always with its text. */
+    var statusBlock = createElement("div", "application-row__status");
+    statusBlock.appendChild(
+      createElement(
+        "span",
+        "badge " + statuses.badgeClass(application.status),
+        application.status
+      )
+    );
+    row.appendChild(statusBlock);
+
+    /* Column 4: a labelled dropdown for changing the status. */
+    var control = createElement("div", "application-row__control");
+    var selectId = "status-" + application.id;
+
+    var label = createElement(
+      "label",
+      "application-row__label",
+      "Status for " + application.title
+    );
+    label.setAttribute("for", selectId);
+    control.appendChild(label);
+
+    var select = createElement("select", "select application-row__select");
+    select.id = selectId;
+    select.setAttribute("data-id", application.id);
+
+    statuses.list.forEach(function (status) {
+      var option = document.createElement("option");
+      option.value = status;
+      option.textContent = status;
+      option.selected = status === application.status;
+      select.appendChild(option);
+    });
+
+    control.appendChild(select);
+    row.appendChild(control);
+
+    return row;
+  }
+
+  /* --- Rendering ---------------------------------------------------------- */
+
+  function render() {
+    var all = store.list();
+    var matches = all.filter(matchesFilters);
+
+    /* Newest first. The ISO dates sort correctly as plain text. */
+    matches.sort(function (a, b) {
+      if (a.appliedOn === b.appliedOn) {
+        return 0;
+      }
+      return a.appliedOn < b.appliedOn ? 1 : -1;
+    });
+
+    renderOverview();
+    list.textContent = "";
+
+    /* Empty tracker: the two empty states are never shown together. */
+    if (all.length === 0) {
+      list.hidden = true;
+      emptyState.hidden = false;
+      noMatchState.hidden = true;
+      if (resultCount) {
+        resultCount.textContent = "";
+      }
+      return;
+    }
+
+    emptyState.hidden = true;
+
+    if (matches.length === 0) {
+      list.hidden = true;
+      noMatchState.hidden = false;
+      if (resultCount) {
+        resultCount.textContent =
+          "No applications match your search and status filter";
+      }
+      return;
+    }
+
+    noMatchState.hidden = true;
+    list.hidden = false;
+
+    if (resultCount) {
+      resultCount.textContent =
+        "Showing " +
+        matches.length +
+        " of " +
+        all.length +
+        (all.length === 1 ? " application" : " applications");
+    }
+
+    matches.forEach(function (application) {
+      list.appendChild(buildRow(application));
+    });
+  }
+
+  /* --- Status changes -----------------------------------------------------
+     One listener on the list handles every dropdown. */
+
+  list.addEventListener("change", function (event) {
+    var select = event.target.closest("select[data-id]");
+    if (!select) {
+      return;
+    }
+
+    var id = select.getAttribute("data-id");
+    var nextStatus = select.value;
+    var record = store.list().filter(function (item) {
+      return item.id === id;
+    })[0];
+
+    if (!record || !store.setStatus(id, nextStatus)) {
+      render();
+      return;
+    }
+
+    /* Redraw: the badge, the five numbers and the count all change. */
+    render();
+
+    /* render() rebuilt the rows, so put focus back on the same dropdown. */
+    var replaced = list.querySelector('select[data-id="' + id + '"]');
+    if (replaced) {
+      replaced.focus();
+    }
+
+    announce(record.title + " moved to " + nextStatus + ".");
+  });
+
+  /* --- Add application dialog --------------------------------------------- */
+
+  function setFieldError(input, errorElement, message) {
+    if (!input || !errorElement) {
+      return;
+    }
+
+    if (!message) {
+      input.removeAttribute("aria-invalid");
+      errorElement.textContent = "";
+      errorElement.hidden = true;
+      return;
+    }
+
+    input.setAttribute("aria-invalid", "true");
+    errorElement.textContent = message;
+    errorElement.hidden = false;
+  }
+
+  function showFormError(message) {
+    if (!formError) {
+      return;
+    }
+
+    formError.textContent = message;
+    formError.hidden = !message;
+  }
+
+  function clearFormErrors() {
+    setFieldError(titleInput, titleError, "");
+    setFieldError(companyInput, companyError, "");
+    setFieldError(dateInput, dateError, "");
+    showFormError("");
+  }
+
+  function openModal(trigger) {
+    lastFocusedElement = trigger || document.activeElement;
+
+    form.reset();
+    clearFormErrors();
+
+    /* A sensible starting point: applied today, at the first status. */
+    if (dateInput) {
+      dateInput.value = isoToday();
+      dateInput.max = isoToday();
+    }
+    if (statusInput) {
+      statusInput.value = "Applied";
+    }
+
+    modal.hidden = false;
+    document.addEventListener("keydown", handleModalKeydown);
+
+    /* Focus moves into the dialog so keyboard users start inside it. */
+    if (titleInput) {
+      titleInput.focus();
+    }
+  }
+
+  function closeModal() {
+    if (modal.hidden) {
+      return;
+    }
+
+    modal.hidden = true;
+    document.removeEventListener("keydown", handleModalKeydown);
+
+    /* Focus goes back to whichever button opened the dialog. */
+    if (lastFocusedElement && document.contains(lastFocusedElement)) {
+      lastFocusedElement.focus();
+    } else if (addButtons.length > 0) {
+      addButtons[0].focus();
+    }
+
+    lastFocusedElement = null;
+  }
+
+  function handleModalKeydown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeModal();
+      return;
+    }
+
+    /* Keep Tab inside the dialog while it is open. */
+    if (event.key !== "Tab") {
+      return;
+    }
+
+    var focusable = modal.querySelectorAll(
+      "button:not([disabled]), a[href], input, select, textarea"
+    );
+
+    if (focusable.length === 0) {
+      return;
+    }
+
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  /* Checks every field and reports the first problem inline. Returns true
+     only when the form may be saved. */
+  function validateForm() {
+    var valid = true;
+
+    var title = titleInput ? titleInput.value.trim() : "";
+    var company = companyInput ? companyInput.value.trim() : "";
+    var appliedOn = dateInput ? dateInput.value : "";
+
+    var titleMessage = title ? "" : "Enter the opportunity title.";
+    setFieldError(titleInput, titleError, titleMessage);
+    if (titleMessage) {
+      valid = false;
+    }
+
+    var companyMessage = company ? "" : "Enter the organisation name.";
+    setFieldError(companyInput, companyError, companyMessage);
+    if (companyMessage) {
+      valid = false;
+    }
+
+    var dateMessage = "";
+    if (!appliedOn) {
+      dateMessage = "Choose the date you applied.";
+    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(appliedOn)) {
+      dateMessage = "Enter a valid date.";
+    } else if (appliedOn > isoToday()) {
+      dateMessage = "The date cannot be in the future.";
+    }
+    setFieldError(dateInput, dateError, dateMessage);
+    if (dateMessage) {
+      valid = false;
+    }
+
+    if (!valid) {
+      showFormError("");
+      return false;
+    }
+
+    /* The store compares titles and organisations trimmed and
+       case-insensitively, so "google " and "Google" are the same employer. */
+    var duplicate = store.findDuplicate(title, company);
+    if (duplicate) {
+      showFormError(
+        "You already track " +
+          duplicate.title +
+          " at " +
+          duplicate.company +
+          "."
+      );
+      return false;
+    }
+
+    showFormError("");
+    return true;
+  }
+
+  function focusFirstProblem() {
+    var invalid = form.querySelector('[aria-invalid="true"]');
+
+    if (invalid) {
+      invalid.focus();
+      return;
+    }
+
+    if (formError && !formError.hidden) {
+      formError.focus();
+    }
+  }
+
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+
+    if (!validateForm()) {
+      focusFirstProblem();
+      return;
+    }
+
+    var result = store.add({
+      title: titleInput.value,
+      company: companyInput.value,
+      appliedOn: dateInput.value,
+      status: statusInput.value
+    });
+
+    if (!result.ok) {
+      showFormError(
+        result.reason === "duplicate"
+          ? "You already track this opportunity at this organisation."
+          : "That application could not be saved. Check the details and try again."
+      );
+      focusFirstProblem();
+      return;
+    }
+
+    closeModal();
+    render();
+    announce(
+      "Added " +
+        result.application.title +
+        " at " +
+        result.application.company +
+        "."
+    );
+  });
+
+  /* Correcting a field clears its own message, so errors never linger after
+     the user has fixed them. */
+  [
+    [titleInput, titleError],
+    [companyInput, companyError],
+    [dateInput, dateError]
+  ].forEach(function (pair) {
+    var input = pair[0];
+    var errorElement = pair[1];
+
+    if (!input) {
+      return;
+    }
+
+    input.addEventListener("input", function () {
+      setFieldError(input, errorElement, "");
+      showFormError("");
+    });
+  });
+
+  /* --- Clearing the filters ----------------------------------------------- */
+
+  function clearFilters() {
+    var focusWasInNoMatch = noMatchState.contains(document.activeElement);
+
+    state.search = "";
+    state.status = "all";
+
+    if (searchInput) {
+      searchInput.value = "";
+    }
+    if (statusFilter) {
+      statusFilter.value = "all";
+    }
+
+    render();
+
+    /* The empty state's button is about to be hidden, so move focus instead
+       of losing it. */
+    if (focusWasInNoMatch && searchInput) {
+      searchInput.focus();
+    }
+  }
+
+  /* --- Wiring -------------------------------------------------------------- */
+
+  /* The form has no submit button of its own, but pressing Enter in the
+     search box can still submit it; keep the page where it is. */
+  if (filtersForm) {
+    filtersForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+    });
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener("input", function () {
+      state.search = searchInput.value;
+      render();
+    });
+  }
+
+  if (statusFilter) {
+    statusFilter.addEventListener("change", function () {
+      state.status = statusFilter.value;
+      render();
+    });
+  }
+
+  Array.prototype.forEach.call(clearButtons, function (button) {
+    button.addEventListener("click", clearFilters);
+  });
+
+  Array.prototype.forEach.call(addButtons, function (button) {
+    button.addEventListener("click", function () {
+      openModal(button);
+    });
+  });
+
+  /* Close the dialog with its close button, Cancel, or the backdrop. */
+  modal.addEventListener("click", function (event) {
+    if (event.target.closest("[data-application-modal-close]")) {
+      closeModal();
+    }
+  });
+
   render();
 })();

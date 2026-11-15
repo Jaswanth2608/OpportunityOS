@@ -1931,3 +1931,235 @@ body.drawer-open .overlay {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+
+/* ==========================================================================
+   13. My Applications
+   --------------------------------------------------------------------------
+   Layout for applications.html only. Cards, badges, buttons, form controls,
+   the modal, the toast and the empty state all come from section 10; this
+   section adds the overview grid, the application rows, the add-application
+   form and the label that is only read out by a screen reader.
+
+   Mobile first: the overview is two tiles across (Total spans the row) and
+   every row stacks. At 768px the overview is three across and each row
+   becomes four columns; at 1024px the overview shows all five tiles.
+   ========================================================================== */
+
+.applications {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-width: var(--container-max);
+}
+
+/* --- Heading ---------------------------------------------------------- */
+
+/* The live count under the page description. Tabular figures keep it steady
+   as the number of applications changes. */
+.applications__count {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+  font-weight: var(--fw-medium);
+  color: var(--color-ink);
+}
+
+/* --- Overview cards --------------------------------------------------- */
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+/* Grid items default to min-width: auto, which lets a long word widen the
+   grid; min-width: 0 keeps the tiles inside the screen. */
+.overview-grid > * {
+  min-width: 0;
+}
+
+/* Total is the headline number, so it takes the whole row on phones, where
+   there are only two columns. */
+.overview-grid .overview-total {
+  grid-column: 1 / -1;
+}
+
+/* --- Application list ------------------------------------------------- */
+
+.application-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* The list is hidden with the hidden attribute when nothing matches. */
+.application-list[hidden] {
+  display: none;
+}
+
+/* One row layout for every screen size. On a phone it reads top to bottom:
+   title, then date and status, then the status control. */
+.application-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "main main"
+    "date status"
+    "control control";
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-4);
+  border: var(--border) solid var(--color-line);
+  background-color: var(--color-surface);
+}
+
+.application-row__main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.application-row__title {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+  color: var(--color-ink);
+  /* Long unbroken titles wrap instead of widening the page. */
+  overflow-wrap: anywhere;
+}
+
+.application-row__org {
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+  color: var(--color-ink-muted);
+}
+
+/* Date column: a quiet label plus a machine-readable <time>. */
+.application-row__date {
+  grid-area: date;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+}
+
+/* The "Applied" caption stays in the UI font, so it does not read as a
+   value. */
+.application-row__date-label {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: var(--lh-label);
+  letter-spacing: var(--ls-label);
+  font-weight: var(--fw-medium);
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.application-row__status {
+  grid-area: status;
+  justify-self: end;
+}
+
+/* Status control: the dropdown fills its column, and the badge above it
+   already shows the current value, so the label is for assistive tech only. */
+.application-row__control {
+  grid-area: control;
+  min-width: 0;
+}
+
+.application-row__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.application-row__select {
+  min-height: 36px;
+  font-size: var(--fs-small);
+}
+
+/* --- Add application form --------------------------------------------- */
+
+.application-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Inside the dialog the footer belongs to the form, not to .modal__dialog, so
+   it needs its own top spacing. */
+.application-form .modal__footer {
+  margin-top: var(--space-2);
+}
+
+/* Duplicate and unexpected problems appear above the fields, with a Mocha
+   border so they are never missed. */
+.form-error {
+  margin: 0;
+  padding: var(--space-3);
+  border: var(--border) solid var(--color-accent-strong);
+  background-color: var(--color-surface);
+  color: var(--color-accent-strong);
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+  font-weight: var(--fw-medium);
+}
+
+.form-error[hidden] {
+  display: none;
+}
+
+/* --- Breakpoints ------------------------------------------------------ */
+
+/* Tablet: three overview tiles per row, and rows become four columns:
+   details, date, badge, status control. */
+@media (min-width: 768px) {
+  .overview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .overview-grid .overview-total {
+    grid-column: auto;
+  }
+
+  .application-row {
+    grid-template-columns: minmax(0, 1fr) auto auto 168px;
+    grid-template-areas: "main date status control";
+    gap: var(--space-3);
+  }
+
+  .application-row__date {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+}
+
+/* Desktop: all five overview tiles across, and a wider status control. */
+@media (min-width: 1024px) {
+  .overview-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .application-row {
+    grid-template-columns: minmax(0, 1fr) auto auto 190px;
+  }
+}
