@@ -2163,3 +2163,69 @@ body.drawer-open .overlay {
     grid-template-columns: minmax(0, 1fr) auto auto 190px;
   }
 }
+
+
+/* ==========================================================================
+   14. Bookmarks
+   --------------------------------------------------------------------------
+   Layout for bookmarks.html only. The card grid, cards, badges, chips, form
+   controls, modal, empty states and toast all come from sections 10 and 12;
+   this section adds the page wrapper, the live saved count, the filter row
+   with three controls, and a footer that fits three actions.
+
+   Mobile first: the filter fields stack and the card actions take a full row
+   each. From 768px the three filters sit side by side and the actions share
+   one line.
+   ========================================================================== */
+
+.bookmarks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-width: var(--container-max);
+}
+
+/* --- Live saved count ------------------------------------------------ */
+
+/* Tabular figures keep the number steady as bookmarks are removed. */
+.bookmarks__count {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+  font-weight: var(--fw-medium);
+  color: var(--color-ink);
+}
+
+/* --- Filter row -------------------------------------------------------
+   Search, location and work mode in one row from 768px. The type chips stay
+   in their own group below, exactly as they are on Explore. */
+
+.bookmark-filters__row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+/* --- Card actions -----------------------------------------------------
+   Three actions per card instead of two, and their labels are long, so each
+   one takes a full line at every width. That keeps the buttons the same size
+   whether a card is 218px wide at 1024px or 357px wide at 1440px. */
+
+.bookmark-card .card__footer {
+  justify-content: flex-start;
+  align-items: stretch;
+}
+
+.bookmark-card .card__footer .btn {
+  flex: 1 1 100%;
+}
+
+/* --- Breakpoints ------------------------------------------------------ */
+
+@media (min-width: 768px) {
+  .bookmark-filters__row {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  }
+}

@@ -360,6 +360,38 @@
 
 
 /* ==========================================================================
+   OpportunityOS — opportunity types (shared by every page)
+   --------------------------------------------------------------------------
+   One map decides which types exist and which badge style each one uses, so
+   Explore and Bookmarks draw the same card header the same way.
+   ========================================================================== */
+
+(function () {
+  "use strict";
+
+  var TYPES = ["Internship", "Job", "Hackathon"];
+
+  /* One badge style per type. The classes come from section 10.2. */
+  var TYPE_BADGES = {
+    Internship: "badge--accent",
+    Job: "badge--info",
+    Hackathon: "badge--strong"
+  };
+
+  function badgeClass(type) {
+    /* An unknown value falls back to the neutral badge instead of breaking. */
+    return TYPE_BADGES[type] || "badge--neutral";
+  }
+
+  window.OpportunityOS = window.OpportunityOS || {};
+  window.OpportunityOS.types = {
+    list: TYPES.slice(),
+    badgeClass: badgeClass
+  };
+})();
+
+
+/* ==========================================================================
    OpportunityOS — application store (shared by My Applications and Dashboard)
    --------------------------------------------------------------------------
    The user's applications live in localStorage under one versioned key, so a
@@ -976,12 +1008,9 @@
   var modalSummary = document.getElementById("opportunity-modal-summary");
   var modalDetails = document.getElementById("opportunity-modal-details");
 
-  /* One badge style per opportunity type, in one place. */
-  var TYPE_BADGES = {
-    Internship: "badge--accent",
-    Job: "badge--info",
-    Hackathon: "badge--strong"
-  };
+  /* Badge styles come from the shared type map near the top of this file, so
+     Explore and Bookmarks can never draw a type differently. */
+  var types = window.OpportunityOS && window.OpportunityOS.types;
 
   /* --- State ------------------------------------------------------------- */
   var state = {
@@ -1088,7 +1117,7 @@
     var header = createElement("div", "card__header");
     header.appendChild(createElement("h3", "card__title", opportunity.title));
 
-    var badgeClass = TYPE_BADGES[opportunity.type] || "badge--neutral";
+    var badgeClass = types ? types.badgeClass(opportunity.type) : "badge--neutral";
     header.appendChild(
       createElement("span", "badge " + badgeClass, opportunity.type)
     );
@@ -2086,5 +2115,746 @@
     }
   });
 
+  render();
+})();
+
+
+/* ==========================================================================
+   OpportunityOS — my bookmarks
+   --------------------------------------------------------------------------
+   This block only runs on bookmarks.html (#bookmarks).
+
+   It shows the opportunities the user saved from Explore, using the same
+   shared bookmark store, so nothing here is a second copy of the bookmarks:
+   removing one here changes what Explore and the Dashboard show after they
+   are reloaded.
+
+   What it draws:
+     1. The live saved count and the filter results
+     2. One card per bookmark, with Remove, View details and Add to
+        applications actions
+     3. Two empty states
+     4. Its own details dialog (the Explore dialog belongs to that page's
+        module and is not shared)
+
+   Filters live in one `state` object, so changing one never resets another.
+   ========================================================================== */
+
+(function () {
+  "use strict";
+
+  /* --- Only run on the Bookmarks page ------------------------------------ */
+  var page = document.getElementById("bookmarks");
+  if (!page) {
+    return;
+  }
+
+  var sampleData = window.OpportunityOS_DATA;
+  var bookmarks = window.OpportunityOS && window.OpportunityOS.bookmarks;
+  var types = window.OpportunityOS && window.OpportunityOS.types;
+  var applications = window.OpportunityOS && window.OpportunityOS.applications;
+
+  if (!sampleData || !bookmarks || !types) {
+    return;
+  }
+
+  var opportunities = sampleData.opportunities || [];
+
+  /* --- Elements ---------------------------------------------------------- */
+  var list = document.getElementById("bookmark-list");
+  var emptyState = document.getElementById("bookmarks-empty");
+  var emptyHeading = document.getElementById("bookmarks-empty-title");
+  var emptyLink = document.getElementById("bookmarks-empty-link");
+  var noMatchState = document.getElementById("bookmarks-no-match");
+  var noMatchHeading = document.getElementById("bookmarks-no-match-title");
+  var savedCount = document.getElementById("bookmarks-count");
+  var resultCount = document.getElementById("bookmark-result-count");
+  var filtersForm = document.getElementById("bookmark-filters");
+  var searchInput = document.getElementById("bookmark-search");
+  var locationSelect = document.getElementById("bookmark-location");
+  var modeSelect = document.getElementById("bookmark-mode");
+  var typeGroup = document.querySelector('[data-bookmark-filter="type"]');
+  var clearButtons = document.querySelectorAll(
+    "[data-clear-bookmark-filters]"
+  );
+  var toast = document.getElementById("bookmark-message");
+
+  var modal = document.getElementById("bookmark-modal");
+  var modalTitle = document.getElementById("bookmark-modal-title");
+  var modalSummary = document.getElementById("bookmark-modal-summary");
+  var modalDetails = document.getElementById("bookmark-modal-details");
+
+  /* Without the list and the dialog there is nothing to build. */
+  if (!list || !modal || !emptyState || !noMatchState) {
+    return;
+  }
+
+  /* --- State ------------------------------------------------------------- */
+  var state = {
+    search: "",
+    type: "all",
+    location: "all",
+    mode: "all"
+  };
+
+  var lastFocusedElement = null;
+  var toastTimer = null;
+
+  /* --- Dates -------------------------------------------------------------
+     Small local helpers, following the same pattern as the other modules. */
+  var MS_PER_DAY = 24 * 60 * 60 * 1000;
+  var dateFormatter = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  });
+
+  function parseIsoDate(isoDate) {
+    var parts = isoDate.split("-");
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  }
+
+  function today() {
+    var now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }
+
+  function daysUntil(isoDate) {
+    return Math.round((parseIsoDate(isoDate) - today()) / MS_PER_DAY);
+  }
+
+  function formatDate(isoDate) {
+    return dateFormatter.format(parseIsoDate(isoDate));
+  }
+
+  function countdownLabel(days) {
+    if (days < 0) {
+      return "Closed";
+    }
+    if (days === 0) {
+      return "today";
+    }
+    if (days === 1) {
+      return "tomorrow";
+    }
+    return "in " + days + " days";
+  }
+
+  /* Today as YYYY-MM-DD, used as the applied-on date when a bookmark is added
+     to the applications store. */
+  function isoToday() {
+    var now = new Date();
+    var month = String(now.getMonth() + 1).padStart(2, "0");
+    var day = String(now.getDate()).padStart(2, "0");
+    return now.getFullYear() + "-" + month + "-" + day;
+  }
+
+  /* --- Small DOM helpers -------------------------------------------------- */
+
+  function createElement(tagName, className, text) {
+    var element = document.createElement(tagName);
+    if (className) {
+      element.className = className;
+    }
+    if (text !== undefined) {
+      element.textContent = text;
+    }
+    return element;
+  }
+
+  /* --- Announcements ------------------------------------------------------ */
+
+  function announce(message) {
+    if (!toast) {
+      return;
+    }
+
+    toast.textContent = message;
+    toast.classList.add("is-visible");
+
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(function () {
+      toast.classList.remove("is-visible");
+      toast.textContent = "";
+    }, 3000);
+  }
+
+  /* --- Data --------------------------------------------------------------- */
+
+  /* The saved opportunities, always read from the shared bookmark store. The
+     order follows the dataset; render() sorts them for display. */
+  function getSaved() {
+    return opportunities.filter(function (opportunity) {
+      return bookmarks.has(opportunity.id);
+    });
+  }
+
+  /* Filters are ANDed: every active control has to match. */
+  function matchesFilters(opportunity) {
+    var term = state.search.trim().toLowerCase();
+
+    if (term) {
+      var searchable = (
+        opportunity.title +
+        " " +
+        opportunity.organisation
+      ).toLowerCase();
+
+      if (searchable.indexOf(term) === -1) {
+        return false;
+      }
+    }
+
+    if (state.type !== "all" && opportunity.type !== state.type) {
+      return false;
+    }
+
+    if (state.location !== "all" && opportunity.location !== state.location) {
+      return false;
+    }
+
+    if (state.mode !== "all" && opportunity.mode !== state.mode) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /* Upcoming deadlines first, soonest at the top; expired opportunities last.
+     Sort is stable, so two expired ones keep their dataset order and two on
+     the same day keep the order they were saved in. */
+  function sortByDeadline(collection) {
+    return collection.slice().sort(function (a, b) {
+      var aDays = daysUntil(a.deadline);
+      var bDays = daysUntil(b.deadline);
+      var aExpired = aDays < 0;
+      var bExpired = bDays < 0;
+
+      if (aExpired !== bExpired) {
+        return aExpired ? 1 : -1;
+      }
+
+      if (aExpired && bExpired) {
+        return 0;
+      }
+
+      return parseIsoDate(a.deadline) - parseIsoDate(b.deadline);
+    });
+  }
+
+  /* --- Cards -------------------------------------------------------------- */
+
+  function buildCard(opportunity) {
+    var card = createElement("li", "card opportunity-card bookmark-card");
+
+    /* Header: title and type badge, from the shared type map. */
+    var header = createElement("div", "card__header");
+    header.appendChild(createElement("h3", "card__title", opportunity.title));
+    header.appendChild(
+      createElement(
+        "span",
+        "badge " + types.badgeClass(opportunity.type),
+        opportunity.type
+      )
+    );
+    card.appendChild(header);
+
+    /* Organisation, mode and location. */
+    card.appendChild(
+      createElement("p", "opportunity-card__org", opportunity.organisation)
+    );
+    card.appendChild(
+      createElement(
+        "p",
+        "opportunity-card__meta",
+        opportunity.mode + " \u00b7 " + opportunity.location
+      )
+    );
+
+    /* Deadline with a machine-readable <time> element. */
+    var days = daysUntil(opportunity.deadline);
+    var deadline = createElement("p", "opportunity-card__deadline");
+    var time = createElement("time", "", formatDate(opportunity.deadline));
+    time.setAttribute("datetime", opportunity.deadline);
+    deadline.appendChild(document.createTextNode("Closes "));
+    deadline.appendChild(time);
+    deadline.appendChild(
+      document.createTextNode(" \u00b7 " + countdownLabel(days))
+    );
+    card.appendChild(deadline);
+
+    card.appendChild(
+      createElement("p", "opportunity-card__summary", opportunity.summary)
+    );
+
+    /* Footer: Remove bookmark, View details, Add to applications. */
+    var footer = createElement("div", "card__footer");
+
+    var removeButton = createElement(
+      "button",
+      "btn btn--secondary",
+      "Remove bookmark"
+    );
+    removeButton.type = "button";
+    removeButton.setAttribute("data-action", "remove");
+    removeButton.setAttribute("data-id", opportunity.id);
+    removeButton.setAttribute(
+      "aria-label",
+      "Remove bookmark for " + opportunity.title
+    );
+    footer.appendChild(removeButton);
+
+    var detailsButton = createElement(
+      "button",
+      "btn btn--tertiary",
+      "View details"
+    );
+    detailsButton.type = "button";
+    detailsButton.setAttribute("data-action", "details");
+    detailsButton.setAttribute("data-id", opportunity.id);
+    detailsButton.setAttribute(
+      "aria-label",
+      "View details for " + opportunity.title
+    );
+    footer.appendChild(detailsButton);
+
+    /* If this opportunity is already tracked, the action is shown disabled
+       instead of letting a duplicate application be created. */
+    var tracked =
+      applications &&
+      applications.findDuplicate(opportunity.title, opportunity.organisation);
+
+    var addButton = createElement(
+      "button",
+      "btn " + (tracked ? "btn--secondary" : "btn--primary"),
+      tracked ? "In applications" : "Add to applications"
+    );
+    addButton.type = "button";
+    addButton.setAttribute("data-action", "add-application");
+    addButton.setAttribute("data-id", opportunity.id);
+    addButton.setAttribute(
+      "aria-label",
+      tracked
+        ? opportunity.title + " is already in your applications"
+        : "Add " + opportunity.title + " to your applications"
+    );
+
+    if (tracked) {
+      addButton.disabled = true;
+    }
+
+    footer.appendChild(addButton);
+
+    card.appendChild(footer);
+    return card;
+  }
+
+  /* --- Rendering ---------------------------------------------------------- */
+
+  function render() {
+    var all = getSaved();
+    var matches = sortByDeadline(all.filter(matchesFilters));
+
+    if (savedCount) {
+      savedCount.textContent =
+        bookmarks.count() === 1
+          ? "1 opportunity saved"
+          : bookmarks.count() + " opportunities saved";
+    }
+
+    list.textContent = "";
+
+    /* Nothing saved at all: the empty tracker state. */
+    if (all.length === 0) {
+      list.hidden = true;
+      emptyState.hidden = false;
+      noMatchState.hidden = true;
+      if (resultCount) {
+        resultCount.textContent = "";
+      }
+      return;
+    }
+
+    emptyState.hidden = true;
+
+    /* Saved, but the filters exclude everything. */
+    if (matches.length === 0) {
+      list.hidden = true;
+      noMatchState.hidden = false;
+      if (resultCount) {
+        resultCount.textContent = "No bookmarks match the current filters";
+      }
+      return;
+    }
+
+    noMatchState.hidden = true;
+    list.hidden = false;
+
+    if (resultCount) {
+      resultCount.textContent =
+        "Showing " +
+        matches.length +
+        " of " +
+        all.length +
+        (all.length === 1 ? " saved opportunity" : " saved opportunities");
+    }
+
+    matches.forEach(function (opportunity) {
+      list.appendChild(buildCard(opportunity));
+    });
+  }
+
+  /* --- Removing a bookmark ------------------------------------------------
+     The shared store only offers toggle(), so has() is checked first: that way
+     a double click can never turn into a second toggle and re-add the
+     bookmark. */
+
+  function removeBookmark(opportunity, button) {
+    if (!bookmarks.has(opportunity.id)) {
+      render();
+      return;
+    }
+
+    /* Remember where the clicked button sat, so focus can go to the same
+       position in the redrawn list. */
+    var removeButtons = Array.prototype.slice.call(
+      list.querySelectorAll('[data-action="remove"]')
+    );
+    var index = removeButtons.indexOf(button);
+
+    bookmarks.toggle(opportunity.id);
+    render();
+
+    announce("Removed " + opportunity.title + " from bookmarks.");
+
+    /* Focus must never stay on the removed button. */
+    var remaining = list.querySelectorAll('[data-action="remove"]');
+
+    if (remaining.length > 0) {
+      var next = index < 0 ? 0 : Math.min(index, remaining.length - 1);
+      remaining[next].focus();
+      return;
+    }
+
+    /* The last visible card went away: move to the state now on screen. */
+    if (!emptyState.hidden && emptyHeading) {
+      emptyHeading.focus();
+    } else if (!noMatchState.hidden && noMatchHeading) {
+      noMatchHeading.focus();
+    } else if (emptyLink) {
+      emptyLink.focus();
+    }
+  }
+
+  /* --- Adding to applications ---------------------------------------------
+     Reuses the application store and its duplicate rule (title + organisation,
+     trimmed and case-insensitive). No opportunityId is stored, and no new
+     storage key is created. */
+
+  function markTracked(button, opportunity) {
+    button.textContent = "In applications";
+    button.className = "btn btn--secondary";
+    button.disabled = true;
+    button.setAttribute(
+      "aria-label",
+      opportunity.title + " is already in your applications"
+    );
+  }
+
+  /* A disabled button cannot keep focus, so move it to the same card's
+     View details button instead of dropping it on the page. */
+  function focusAfterTracked(button) {
+    var footer = button.parentNode;
+    var details = footer
+      ? footer.querySelector('[data-action="details"]')
+      : null;
+
+    if (details) {
+      details.focus();
+    }
+  }
+
+  function addToApplications(opportunity, button) {
+    if (!applications) {
+      announce("Applications are not available on this page.");
+      return;
+    }
+
+    /* Already tracked: say so, disable the action, add nothing. */
+    if (applications.findDuplicate(opportunity.title, opportunity.organisation)) {
+      markTracked(button, opportunity);
+      focusAfterTracked(button);
+      announce(
+        opportunity.title +
+          " at " +
+          opportunity.organisation +
+          " is already in your applications."
+      );
+      return;
+    }
+
+    var result = applications.add({
+      title: opportunity.title,
+      company: opportunity.organisation,
+      appliedOn: isoToday(),
+      status: "Applied"
+    });
+
+    if (!result.ok) {
+      if (result.reason === "duplicate") {
+        markTracked(button, opportunity);
+        focusAfterTracked(button);
+        announce("That application is already in your tracker.");
+        return;
+      }
+
+      announce(
+        opportunity.title + " could not be added. Please try again."
+      );
+      return;
+    }
+
+    /* The bookmark stays saved; only the action changes. */
+    markTracked(button, opportunity);
+    focusAfterTracked(button);
+    announce("Added " + opportunity.title + " to your applications.");
+  }
+
+  /* --- Details dialog ----------------------------------------------------- */
+
+  function addDetail(label, value) {
+    modalDetails.appendChild(createElement("dt", "", label));
+    modalDetails.appendChild(createElement("dd", "", value));
+  }
+
+  function openModal(opportunity, trigger) {
+    lastFocusedElement = trigger || document.activeElement;
+
+    modalTitle.textContent = opportunity.title;
+    modalSummary.textContent = opportunity.summary;
+    modalDetails.textContent = "";
+
+    addDetail("Organisation", opportunity.organisation);
+    addDetail("Type", opportunity.type);
+    addDetail("Work mode", opportunity.mode);
+    addDetail("Location", opportunity.location);
+    addDetail("Deadline", formatDate(opportunity.deadline));
+    addDetail("Time left", countdownLabel(daysUntil(opportunity.deadline)));
+
+    modal.hidden = false;
+    document.addEventListener("keydown", handleModalKeydown);
+
+    /* Focus starts inside the dialog. The selector asks for a button, because
+       the backdrop shares the close attribute and is not focusable. */
+    var closeButton = modal.querySelector("button[data-bookmark-modal-close]");
+    if (closeButton) {
+      closeButton.focus();
+    }
+  }
+
+  function closeModal() {
+    if (modal.hidden) {
+      return;
+    }
+
+    modal.hidden = true;
+    document.removeEventListener("keydown", handleModalKeydown);
+
+    /* Focus returns to the View details button that opened it. */
+    if (lastFocusedElement && document.contains(lastFocusedElement)) {
+      lastFocusedElement.focus();
+    } else if (searchInput) {
+      searchInput.focus();
+    }
+
+    lastFocusedElement = null;
+  }
+
+  function handleModalKeydown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeModal();
+      return;
+    }
+
+    /* Keep Tab inside the dialog while it is open. */
+    if (event.key !== "Tab") {
+      return;
+    }
+
+    var focusable = modal.querySelectorAll(
+      "button:not([disabled]), a[href], input, select, textarea"
+    );
+
+    if (focusable.length === 0) {
+      return;
+    }
+
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  /* --- Clearing the filters ----------------------------------------------- */
+
+  function clearFilters() {
+    var focusWasInNoMatch = noMatchState.contains(document.activeElement);
+
+    state.search = "";
+    state.type = "all";
+    state.location = "all";
+    state.mode = "all";
+
+    if (searchInput) {
+      searchInput.value = "";
+    }
+    if (locationSelect) {
+      locationSelect.value = "all";
+    }
+    if (modeSelect) {
+      modeSelect.value = "all";
+    }
+
+    if (typeGroup) {
+      Array.prototype.forEach.call(
+        typeGroup.querySelectorAll("button[data-value]"),
+        function (chip) {
+          var isAll = chip.getAttribute("data-value") === "all";
+          chip.setAttribute("aria-pressed", isAll ? "true" : "false");
+        }
+      );
+    }
+
+    render();
+
+    /* The no-results state is about to be hidden, so move focus somewhere
+       sensible instead of losing it. */
+    if (focusWasInNoMatch && searchInput) {
+      searchInput.focus();
+    }
+  }
+
+  /* --- Wiring -------------------------------------------------------------- */
+
+  /* Location options come from the dataset, so they cannot drift out of date. */
+  function fillLocations() {
+    if (!locationSelect) {
+      return;
+    }
+
+    var locations = [];
+
+    opportunities.forEach(function (opportunity) {
+      if (locations.indexOf(opportunity.location) === -1) {
+        locations.push(opportunity.location);
+      }
+    });
+
+    locations.sort();
+
+    locations.forEach(function (location) {
+      var option = document.createElement("option");
+      option.value = location;
+      option.textContent = location;
+      locationSelect.appendChild(option);
+    });
+  }
+
+  /* The form has no submit button, but Enter in the search field can still
+     submit it; keep the page where it is. */
+  if (filtersForm) {
+    filtersForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+    });
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener("input", function () {
+      state.search = searchInput.value;
+      render();
+    });
+  }
+
+  if (locationSelect) {
+    locationSelect.addEventListener("change", function () {
+      state.location = locationSelect.value;
+      render();
+    });
+  }
+
+  if (modeSelect) {
+    modeSelect.addEventListener("change", function () {
+      state.mode = modeSelect.value;
+      render();
+    });
+  }
+
+  /* Each chip updates only its own part of the state. */
+  if (typeGroup) {
+    typeGroup.addEventListener("click", function (event) {
+      var chip = event.target.closest("button[data-value]");
+      if (!chip) {
+        return;
+      }
+
+      state.type = chip.getAttribute("data-value");
+
+      Array.prototype.forEach.call(
+        typeGroup.querySelectorAll("button[data-value]"),
+        function (item) {
+          item.setAttribute("aria-pressed", item === chip ? "true" : "false");
+        }
+      );
+
+      render();
+    });
+  }
+
+  Array.prototype.forEach.call(clearButtons, function (button) {
+    button.addEventListener("click", clearFilters);
+  });
+
+  /* One listener handles all three card actions, so nothing is bound twice. */
+  list.addEventListener("click", function (event) {
+    var button = event.target.closest("button[data-action]");
+    if (!button) {
+      return;
+    }
+
+    var id = button.getAttribute("data-id");
+    var opportunity = opportunities.filter(function (item) {
+      return item.id === id;
+    })[0];
+
+    if (!opportunity) {
+      return;
+    }
+
+    var action = button.getAttribute("data-action");
+
+    if (action === "remove") {
+      removeBookmark(opportunity, button);
+    } else if (action === "details") {
+      openModal(opportunity, button);
+    } else if (action === "add-application") {
+      addToApplications(opportunity, button);
+    }
+  });
+
+  /* Close the dialog with its buttons or the backdrop. */
+  modal.addEventListener("click", function (event) {
+    if (event.target.closest("[data-bookmark-modal-close]")) {
+      closeModal();
+    }
+  });
+
+  fillLocations();
   render();
 })();
