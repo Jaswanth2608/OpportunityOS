@@ -432,6 +432,27 @@
 
   /* --- Reading and writing --------------------------------------------- */
 
+  /* A date must exist on the calendar, not just look like YYYY-MM-DD:
+     2026-13-45 matches the pattern but is not a real day, and would otherwise
+     be stored and then displayed as 14 Feb 2027. */
+  function isRealDate(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return false;
+    }
+
+    var parts = value.split("-");
+    var year = Number(parts[0]);
+    var month = Number(parts[1]);
+    var day = Number(parts[2]);
+    var date = new Date(year, month - 1, day);
+
+    return (
+      date.getFullYear() === year &&
+      date.getMonth() === month - 1 &&
+      date.getDate() === day
+    );
+  }
+
   /* Turns anything from storage or from the form into a clean record, or null
      when a required field is missing. Keeping this in one place means a
      corrupt entry can never reach a page. */
@@ -455,7 +476,7 @@
 
     /* Dates are always stored as YYYY-MM-DD, which also sorts correctly as
        plain text. */
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(appliedOn)) {
+    if (!isRealDate(appliedOn)) {
       return null;
     }
 
@@ -2856,5 +2877,468 @@
   });
 
   fillLocations();
+  render();
+})();
+
+
+/* ==========================================================================
+   OpportunityOS — analytics
+   --------------------------------------------------------------------------
+   This block only runs on analytics.html (#analytics).
+
+   Everything on the page is calculated here from the shared application store
+   and the sample opportunity dataset, so the numbers cannot disagree with
+   My Applications or the Dashboard.
+
+   Definitions used below (also written on the page):
+     interview conversion = (Interview + Offer) / all applications
+       An offer means an interview happened, so offers count towards this.
+     offer conversion     = Offer / all applications
+     awaiting a decision  = Applied + Under review
+     most common status   = the status with the highest count; ties go to the
+                            first status in the shared order
+   With zero applications, rates are shown as "—" instead of 0%, because a
+   percentage of nothing would be misleading.
+   ========================================================================== */
+
+(function () {
+  "use strict";
+
+  /* --- Only run on the Analytics page ------------------------------------ */
+  var page = document.getElementById("analytics");
+  if (!page) {
+    return;
+  }
+
+  var sampleData = window.OpportunityOS_DATA;
+  var statuses = window.OpportunityOS && window.OpportunityOS.statuses;
+  var applications = window.OpportunityOS && window.OpportunityOS.applications;
+  var bookmarks = window.OpportunityOS && window.OpportunityOS.bookmarks;
+
+  if (!sampleData || !statuses || !applications) {
+    return;
+  }
+
+  var opportunities = sampleData.opportunities || [];
+
+  /* --- Settings --------------------------------------------------------- */
+  var DEADLINE_WINDOW_DAYS = 30;
+  var RECENT_APPLICATION_LIMIT = 5;
+  var MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+  /* One bar style per status, using the existing palette tokens. */
+  var BAR_CLASSES = {
+    Applied: "chart__bar--applied",
+    "Under review": "chart__bar--under-review",
+    Interview: "chart__bar--interview",
+    Offer: "chart__bar--offer",
+    Rejected: "chart__bar--rejected"
+  };
+
+  /* --- Elements ---------------------------------------------------------- */
+  var summary = document.getElementById("analytics-summary");
+  var emptyState = document.getElementById("analytics-empty");
+  var chartSection = document.getElementById("analytics-chart-section");
+  var chart = document.getElementById("status-chart");
+  var chartSummary = document.getElementById("chart-summary");
+  var insightsSection = document.getElementById("analytics-insights-section");
+  var insightInterview = document.getElementById("insight-interview");
+  var insightOffer = document.getElementById("insight-offer");
+  var insightAwaiting = document.getElementById("insight-awaiting");
+  var insightCommon = document.getElementById("insight-common");
+  var insightCommonNote = document.getElementById("insight-common-note");
+  var recentWrap = document.getElementById("analytics-recent-wrap");
+  var recentBody = document.getElementById("analytics-recent-body");
+  var deadlineList = document.getElementById("analytics-deadline-list");
+  var deadlinesEmpty = document.getElementById("analytics-deadlines-empty");
+
+  /* Keyed by the analytics card's id. */
+  var numberElements = {
+    total: document.getElementById("analytics-total"),
+    Applied: document.getElementById("analytics-applied"),
+    "Under review": document.getElementById("analytics-review"),
+    Interview: document.getElementById("analytics-interview"),
+    Offer: document.getElementById("analytics-offer"),
+    Rejected: document.getElementById("analytics-rejected")
+  };
+
+  if (!summary || !emptyState || !chart || !chartSection) {
+    return;
+  }
+
+  /* --- Dates -------------------------------------------------------------
+     Every date on this page is defensive: a missing or malformed date shows
+     as "—" and is skipped by sorting, instead of breaking the page. */
+  var dateFormatter = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  });
+
+  function isIsoDate(value) {
+    return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  }
+
+  function parseIsoDate(value) {
+    var parts = value.split("-");
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  }
+
+  /* The regex alone would accept 2026-13-45, so the parts are compared with
+     the date the browser builds from them: only a real calendar day passes. */
+  function isValidDateValue(value) {
+    if (!isIsoDate(value)) {
+      return false;
+    }
+
+    var parts = value.split("-");
+    var year = Number(parts[0]);
+    var month = Number(parts[1]);
+    var day = Number(parts[2]);
+    var date = new Date(year, month - 1, day);
+
+    return (
+      date.getFullYear() === year &&
+      date.getMonth() === month - 1 &&
+      date.getDate() === day
+    );
+  }
+
+  function formatDate(value) {
+    return isValidDateValue(value) ? dateFormatter.format(parseIsoDate(value)) : "—";
+  }
+
+  function today() {
+    var now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }
+
+  /* Days until a date, or null when the date cannot be used. */
+  function daysUntil(value) {
+    if (!isValidDateValue(value)) {
+      return null;
+    }
+
+    return Math.round((parseIsoDate(value) - today()) / MS_PER_DAY);
+  }
+
+  function formatCountdown(days) {
+    if (days === 0) {
+      return "Today";
+    }
+    if (days === 1) {
+      return "Tomorrow";
+    }
+    return "In " + days + " days";
+  }
+
+  /* --- Small helpers ------------------------------------------------------ */
+
+  function createElement(tagName, className, text) {
+    var element = document.createElement(tagName);
+    if (className) {
+      element.className = className;
+    }
+    if (text !== undefined) {
+      element.textContent = text;
+    }
+    return element;
+  }
+
+  function setText(element, value) {
+    if (element) {
+      element.textContent = value;
+    }
+  }
+
+  /* Rounded percentage of the total. Zero applications gives 0, and callers
+     show "—" rather than a 0% rate, so nothing divides by zero. */
+  function share(count, total) {
+    return total > 0 ? Math.round((count / total) * 100) : 0;
+  }
+
+  /* --- 1. Overview numbers and live summary ------------------------------- */
+
+  function renderOverview(counts) {
+    Object.keys(numberElements).forEach(function (key) {
+      setText(numberElements[key], counts[key]);
+    });
+
+    var parts = [];
+
+    if (counts.total === 0) {
+      parts.push("No applications tracked yet");
+    } else {
+      parts.push(
+        counts.total +
+          (counts.total === 1 ? " application tracked" : " applications tracked")
+      );
+    }
+
+    if (bookmarks) {
+      var saved = bookmarks.count();
+      parts.push(
+        saved + (saved === 1 ? " saved opportunity" : " saved opportunities")
+      );
+    }
+
+    if (counts.Interview > 0) {
+      parts.push(
+        counts.Interview +
+          (counts.Interview === 1
+            ? " application at interview stage"
+            : " applications at interview stage")
+      );
+    }
+
+    if (counts.Offer > 0) {
+      parts.push(counts.Offer + (counts.Offer === 1 ? " offer" : " offers"));
+    }
+
+    summary.textContent = parts.join(" \u00b7 ");
+  }
+
+  /* --- 2. Status breakdown chart ------------------------------------------ */
+
+  function renderChart(counts) {
+    chart.textContent = "";
+
+    statuses.list.forEach(function (status) {
+      var count = counts[status];
+      var percentage = share(count, counts.total);
+
+      var row = createElement("li", "chart__row");
+
+      /* A spoken summary of the row, so the bar is never the only cue. */
+      row.setAttribute(
+        "aria-label",
+        status +
+          ": " +
+          count +
+          (count === 1 ? " application, " : " applications, ") +
+          percentage +
+          " percent"
+      );
+
+      row.appendChild(createElement("span", "chart__label", status));
+
+      var track = createElement("span", "chart__track");
+      track.setAttribute("aria-hidden", "true");
+
+      var bar = createElement(
+        "span",
+        "chart__bar " + (BAR_CLASSES[status] || "chart__bar--applied")
+      );
+      bar.style.width = percentage + "%";
+      track.appendChild(bar);
+
+      row.appendChild(track);
+      row.appendChild(createElement("span", "chart__value num", count));
+      row.appendChild(createElement("span", "chart__percent num", percentage + "%"));
+
+      chart.appendChild(row);
+    });
+
+    if (chartSummary) {
+      chartSummary.textContent =
+        counts.total === 1
+          ? "1 application across " + statuses.list.length + " statuses"
+          : counts.total + " applications across " + statuses.list.length + " statuses";
+    }
+  }
+
+  /* --- 3. Insights -------------------------------------------------------- */
+
+  function mostCommonStatus(counts) {
+    var best = null;
+
+    statuses.list.forEach(function (status) {
+      if (counts[status] > 0 && (!best || counts[status] > counts[best])) {
+        best = status;
+      }
+    });
+
+    return best;
+  }
+
+  function renderInsights(counts) {
+    var total = counts.total;
+
+    /* No applications: rates are undefined, so show a dash, never 0%. */
+    if (total === 0) {
+      setText(insightInterview, "\u2014");
+      setText(insightOffer, "\u2014");
+      setText(insightAwaiting, "0");
+      setText(insightCommon, "\u2014");
+      setText(
+        insightCommonNote,
+        "The status the largest number of your applications share."
+      );
+      return;
+    }
+
+    /* An offer implies an interview happened, so both count as reached. */
+    var interviewed = counts.Interview + counts.Offer;
+    var common = mostCommonStatus(counts);
+
+    setText(insightInterview, share(interviewed, total) + "%");
+    setText(insightOffer, share(counts.Offer, total) + "%");
+    setText(insightAwaiting, counts.Applied + counts["Under review"]);
+    setText(insightCommon, common || "\u2014");
+    setText(
+      insightCommonNote,
+      common
+        ? counts[common] +
+            " of " +
+            total +
+            " applications share this status."
+        : "The status the largest number of your applications share."
+    );
+  }
+
+  /* --- 4. Recent applications --------------------------------------------- */
+
+  function renderRecent(list) {
+    if (!recentWrap || !recentBody) {
+      return;
+    }
+
+    /* Newest first; unusable dates sort to the bottom instead of breaking. */
+    var recent = list
+      .slice()
+      .sort(function (a, b) {
+        var aDate = isValidDateValue(a.appliedOn) ? a.appliedOn : "";
+        var bDate = isValidDateValue(b.appliedOn) ? b.appliedOn : "";
+
+        if (aDate === bDate) {
+          return 0;
+        }
+
+        return aDate < bDate ? 1 : -1;
+      })
+      .slice(0, RECENT_APPLICATION_LIMIT);
+
+    recentBody.textContent = "";
+
+    if (recent.length === 0) {
+      recentWrap.hidden = true;
+      return;
+    }
+
+    recentWrap.hidden = false;
+
+    recent.forEach(function (application) {
+      var row = document.createElement("tr");
+
+      row.appendChild(createElement("td", "", application.title));
+      row.appendChild(createElement("td", "", application.company));
+      row.appendChild(
+        createElement("td", "table__num", formatDate(application.appliedOn))
+      );
+
+      var statusCell = document.createElement("td");
+      statusCell.appendChild(
+        createElement(
+          "span",
+          "badge " + statuses.badgeClass(application.status),
+          application.status
+        )
+      );
+      row.appendChild(statusCell);
+
+      recentBody.appendChild(row);
+    });
+  }
+
+  /* --- 5. Upcoming opportunity deadlines ---------------------------------- */
+
+  function getUpcomingDeadlines() {
+    return opportunities
+      .filter(function (opportunity) {
+        var days = daysUntil(opportunity.deadline);
+        return days !== null && days >= 0 && days <= DEADLINE_WINDOW_DAYS;
+      })
+      .sort(function (a, b) {
+        return parseIsoDate(a.deadline) - parseIsoDate(b.deadline);
+      });
+  }
+
+  function renderDeadlines() {
+    if (!deadlineList || !deadlinesEmpty) {
+      return;
+    }
+
+    var deadlines = getUpcomingDeadlines();
+
+    deadlineList.textContent = "";
+
+    if (deadlines.length === 0) {
+      deadlineList.hidden = true;
+      deadlinesEmpty.hidden = false;
+      return;
+    }
+
+    deadlineList.hidden = false;
+    deadlinesEmpty.hidden = true;
+
+    deadlines.forEach(function (opportunity) {
+      var days = daysUntil(opportunity.deadline);
+      var isUrgent = days <= 7;
+
+      var item = createElement(
+        "li",
+        "deadline" + (isUrgent ? " deadline--urgent" : "")
+      );
+
+      var main = createElement("div", "deadline__main");
+      main.appendChild(createElement("p", "deadline__title", opportunity.title));
+      main.appendChild(
+        createElement(
+          "p",
+          "deadline__meta",
+          opportunity.organisation + " \u00b7 " + opportunity.type
+        )
+      );
+
+      var dateBlock = createElement("div", "deadline__date");
+      var time = createElement("time", "", formatDate(opportunity.deadline));
+      time.setAttribute("datetime", opportunity.deadline);
+      dateBlock.appendChild(time);
+      dateBlock.appendChild(
+        createElement("span", "deadline__countdown", formatCountdown(days))
+      );
+
+      item.appendChild(main);
+      item.appendChild(dateBlock);
+      deadlineList.appendChild(item);
+    });
+  }
+
+  /* --- 6. Draw everything -------------------------------------------------- */
+
+  function render() {
+    var counts = applications.countByStatus();
+    var hasApplications = counts.total > 0;
+
+    renderOverview(counts);
+    renderChart(counts);
+    renderInsights(counts);
+    renderRecent(applications.list());
+    renderDeadlines();
+
+    /* With no applications the breakdown and insights would be empty, so the
+       helpful empty state takes their place and the deadlines stay visible. */
+    emptyState.hidden = hasApplications;
+    chartSection.hidden = !hasApplications;
+    if (insightsSection) {
+      insightsSection.hidden = !hasApplications;
+    }
+  }
+
+  /* A small hook so the renderer can be re-run after data changes while
+     developing, and checked from the browser console. */
+  window.OpportunityOS = window.OpportunityOS || {};
+  window.OpportunityOS.renderAnalytics = render;
+
   render();
 })();
