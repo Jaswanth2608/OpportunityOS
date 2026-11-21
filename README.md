@@ -1,118 +1,246 @@
 # OpportunityOS
 
-A Student Career & Opportunity Management platform, built with **HTML5, CSS3 and
-vanilla JavaScript only** — no frameworks, no CSS libraries, no build step.
+A student career and opportunity management platform, built with **HTML5, CSS3
+and vanilla JavaScript only** — no frameworks, no CSS libraries, no build step,
+no backend.
 
-## Pages
+## Problem statement
 
-| File | Page |
+Students juggle internship listings, application deadlines and interview stages
+across bookmarks, notes and email. It is easy to lose track of what was saved,
+what was applied to, and where each application currently stands.
+OpportunityOS brings those three jobs into one calm interface: browse sample
+opportunities, keep the ones worth returning to, and track every application
+from first submission to final outcome.
+
+## Project objectives
+
+* Present opportunities in one searchable, filterable place.
+* Let a student save opportunities without losing them on refresh.
+* Track applications and their status through a five-stage pipeline.
+* Show progress honestly: counts, a status breakdown, conversion rates and
+  upcoming deadlines.
+* Do all of this with plain HTML, CSS and JavaScript that a beginner can read
+  and explain.
+* Meet accessibility basics: keyboard operation, visible focus, clear labels,
+  live announcements and meaningful empty states.
+
+## Main features
+
+* **Shared navigation shell** — a 240px sidebar at 1024px and above, and an
+  accessible off-canvas drawer with a compact header below that.
+* **Dashboard** — application and interview counts, saved opportunities,
+  deadlines in the next 30 days, the five most recent applications and quick
+  actions.
+* **Explore Opportunities** — search by title or organisation, filter by type,
+  work mode and location, open a details dialog, save or unsave opportunities.
+* **My Applications** — five overview cards, a filterable application list with
+  an inline status dropdown, and an add-application dialog with validation and
+  duplicate prevention.
+* **Bookmarks** — the saved opportunities as cards, with remove, details and
+  add-to-applications actions.
+* **Analytics** — six overview numbers, a CSS bar chart of the five statuses,
+  conversion insights, recent applications and upcoming opportunity deadlines.
+* **Persistent demo data** — bookmarks and applications are stored in the
+  browser with `localStorage`, seeded from sample data on first run.
+* **Accessible interactions** — focus traps in the drawer and dialogs, Escape
+  and backdrop closing, focus returned to the control that opened a dialog, and
+  polite live regions for status changes and confirmations.
+* **Responsive layout** — mobile-first CSS with only two breakpoints
+  (`min-width: 768px` and `min-width: 1024px`).
+
+## Technology stack
+
+| Layer | What is used |
 | --- | --- |
-| `index.html` | Dashboard |
-| `explore.html` | Explore Opportunities |
-| `applications.html` | My Applications |
-| `bookmarks.html` | Bookmarks |
-| `analytics.html` | Analytics |
+| Markup | HTML5 (`<time>`, `<table>`, `<dialog>`-style modal markup, landmark elements) |
+| Styling | CSS3 custom properties, Grid, Flexbox, two mobile-first media queries |
+| Behaviour | Vanilla JavaScript (ES5-style classic scripts, IIFEs, no modules, no bundler) |
+| Storage | `window.localStorage` only |
+| Data | A static sample dataset in `js/data.js` |
+| Icons | Inline SVG for the menu and close buttons |
+| Fonts | Inter and JetBrains Mono **if available**, otherwise system fonts |
 
-## Running the project
+No React, Vue, Angular, Bootstrap, Tailwind, chart library, icon package, build
+tool or package manager is used.
 
-Open `index.html` in any modern browser (Chrome, Edge, Firefox). There is
-nothing to install and no server required — the site is plain HTML, CSS and
-classic JavaScript, so it also works from a local file.
+## The five pages
 
-## Current status
-
-**Milestone 1 complete:** design tokens, CSS reset and base typography.
-
-**Milestone 2 complete:** shared application shell on all five pages — a 240px
-fixed sidebar at 1024px and above, and an accessible off-canvas navigation
-drawer with a compact header below that.
-
-**Milestone 3 complete:** reusable UI component styles in `CSS/style.css` —
-buttons, badges, filter chips, form controls, cards and panels, tables, empty
-states, placeholder boxes and the modal. Page content and data follow in later
-milestones.
-
-## Navigation
-
-All five pages share one shell. Above 1024px the sidebar is always visible.
-Below 1024px the menu button in the header opens the drawer, which can be
-closed with its close button, the dimmed backdrop, the Escape key, or by
-resizing the window to desktop width. While open, keyboard focus stays inside
-the drawer and the current page is marked with `aria-current="page"`.
-
-## Component guide
-
-Every component is a plain HTML class in `CSS/style.css` (section 10). No
-component requires JavaScript yet, and none of them declares a colour of its
-own — they all read the tokens.
-
-| Component | Class | Example |
+| File | Page | What it does |
 | --- | --- | --- |
-| Button, primary | `.btn.btn--primary` | `<button class="btn btn--primary" type="button">Save</button>` |
-| Button, secondary | `.btn.btn--secondary` | `<button class="btn btn--secondary" type="button">Cancel</button>` |
-| Button, tertiary | `.btn.btn--tertiary` | `<button class="btn btn--tertiary" type="button">Clear</button>` |
-| Button, disabled | `disabled` attribute | `<button class="btn btn--primary" type="button" disabled>Save</button>` |
-| Button, destructive | `.btn.btn--danger` | `<button class="btn btn--danger" type="button">Remove</button>` |
-| Button row | `.btn-group` | `<div class="btn-group">…</div>` |
-| Status badge | `.badge` + `.badge--neutral` / `--info` / `--accent` / `--strong` | `<span class="badge badge--info">Closing soon</span>` |
-| Filter chips | `.chip-group` + `.chip` | `<button class="chip" type="button" aria-pressed="true">Internships</button>` |
-| Text input | `.field` + `.field__label` + `.input` | `<input class="input" id="search" type="search" />` |
-| Select | `.select` | `<select class="select" id="type">…</select>` |
-| Checkbox / radio | `.choice` + `.choice__input` + `.choice__label` | `<label class="choice"><input class="choice__input" type="checkbox" /> <span class="choice__label">Remote</span></label>` |
-| Field layout | `.form-grid` | one column on phones, two from 768px |
-| Card | `.card` + `__header` / `__title` / `__meta` / `__body` / `__footer` | `<article class="card">…</article>` |
-| Panel | `.panel` / `.panel--tint` | `<div class="panel">…</div>` |
-| Table | `.table-wrap` + `.table` (+ `.table--compact`, `.table__num`) | `<div class="table-wrap"><table class="table">…</table></div>` |
-| Empty state | `.empty` + `__title` / `__text` | `<div class="empty">…</div>` |
-| Placeholder (X) | `.placeholder.placeholder--x` | `<div class="placeholder placeholder--x"></div>` |
-| Placeholder (hatch) | `.placeholder.placeholder--hatch` | `<div class="placeholder placeholder--hatch"></div>` |
-| Modal | `.modal` + `__backdrop` / `__dialog` / `__header` / `__title` / `__close` / `__text` / `__footer` | see the commented example in section 10.9 |
+| `index.html` | Dashboard | Counts, upcoming deadlines, recent applications, quick actions |
+| `explore.html` | Explore Opportunities | Search, filters, opportunity cards, details dialog, save bookmarks |
+| `applications.html` | My Applications | Overview cards, filterable list, inline status changes, add-application form |
+| `bookmarks.html` | Bookmarks | Saved opportunities with remove, details and add-to-applications |
+| `analytics.html` | Analytics | Overview numbers, status chart, conversion insights, deadlines |
 
-### Notes on the components
+Every page shares the same sidebar, header and skip link.
 
-* **Chips use `aria-pressed`, not a class.** The selected state lives in the
-  HTML, so screen readers announce it and JavaScript only flips the attribute.
-* **The modal is styled only.** Its `hidden` attribute controls visibility;
-  open/close behaviour and focus handling arrive with the page scripts.
-* **Checkbox and radio keep the native control** with `accent-color`, so the
-  tick and dot are always drawn correctly by the browser while taking the
-  brand colour and the 16×16 size from the design system.
-* **Disabled buttons and inputs are still readable** (about 4.9:1) but use the
-  muted ink and the alternating surface, plus `cursor: not-allowed`.
-* **Tables scroll inside `.table-wrap`,** so a wide table never creates a
-  horizontal scrollbar on the page itself.
+## Running the project locally
+
+There is nothing to install.
+
+1. Download or clone the folder.
+2. Open `index.html` in a modern browser (Chrome, Edge, Firefox or Safari).
+
+The site also works from the file system (`file://`), because the scripts are
+classic deferred scripts and every path is relative. If you prefer a local
+server for development, any static server works, for example:
+
+```bash
+python -m http.server 8123
+```
+
+then visit `http://127.0.0.1:8123/index.html`.
+
+No API keys, environment variables or accounts are needed.
+
+## How localStorage is used
+
+Two versioned keys hold everything the student creates:
+
+| Key | Contents |
+| --- | --- |
+| `opportunityos.bookmarks.v1` | An array of opportunity IDs that are bookmarked |
+| `opportunityos.applications.v1` | An array of application records |
+
+Each application record looks like this:
+
+```json
+{
+  "id": "app-1",
+  "title": "Product Design Intern",
+  "company": "Northwind Studio",
+  "appliedOn": "2026-11-12",
+  "status": "Under review"
+}
+```
+
+Rules the stores follow:
+
+* **Seeded once.** The sample data in `js/data.js` fills a key only when that
+  key does not exist yet. Existing user data is never overwritten.
+* **One source of truth.** Bookmarks store only IDs, so opportunity details are
+  never copied or stale. Every page reads the same store.
+* **Safe reads.** Malformed JSON, duplicate IDs, missing fields, invalid status
+  values and impossible calendar dates (for example `2026-13-45`) are discarded
+  instead of breaking a page.
+* **Session fallback.** If `localStorage` is blocked (private browsing, browser
+  restrictions), the stores still work in memory for that visit, but the data
+  cannot be remembered after a reload.
+
+Clearing site data in the browser, or removing those two keys, resets the
+project to its sample data.
+
+## Project folder structure
+
+```
+OpportunityOS/
+├── index.html            Dashboard
+├── explore.html          Explore Opportunities
+├── applications.html     My Applications
+├── bookmarks.html        Bookmarks
+├── analytics.html        Analytics
+├── README.md
+├── CSS/
+│   └── style.css         All styles, in numbered sections:
+│                         1–7  tokens, reset, typography, focus, breakpoints
+│                         8–9  shell and responsive shell behaviour
+│                         10   reusable components
+│                         11   Dashboard layout
+│                         12   Explore layout
+│                         13   My Applications layout
+│                         14   Bookmarks layout
+│                         15   Analytics layout
+└── js/
+    ├── data.js           Sample opportunities and applications
+    └── app.js            Shared stores plus one module per page:
+                           shell, bookmarks store, status map, type map,
+                           application store, dashboard, explore,
+                           applications, bookmarks, analytics
+```
+
+`js/app.js` is loaded on every page, but each page module starts by checking for
+its own root element and returns immediately if it is not on that page. That is
+why one file can safely hold all five pages' behaviour.
 
 ## Design system
 
-The visual system comes from the approved Stitch wireframes (grayscale
-layout, spacing, typography and components) with the final brand palette
-applied through CSS custom properties.
+The visual system comes from approved wireframes (grayscale layout, spacing,
+typography and components) with the final palette applied through CSS custom
+properties in one place — the colour-token section of `CSS/style.css`.
 
 | Token | Value | Use |
 | --- | --- | --- |
 | `--color-canvas` | `#F2F0EA` | Moonlit Grey page background |
-| `--color-tint` | `#ADD4E0` | Ethereal Blue highlight surfaces |
-| `--color-accent` | `#A47864` | Mocha Mousse fills, borders, icons, charts |
-| `--color-accent-strong` | `#7A5644` | Primary button fills and small accent text |
+| `--color-tint` | `#ADD4E0` | Ethereal Blue highlight surfaces and chart bars |
+| `--color-accent` | `#A47864` | Mocha Mousse borders, chart bars |
+| `--color-accent-strong` | `#7A5644` | Primary buttons, small accent text |
+| `--color-ink` | `#2A2321` | Headings and body text |
 
-All colour values live in one place: the colour-token section of
-`CSS/style.css`. Nothing else in the project declares a colour.
+Everything else uses those tokens: square corners, 1px hairline borders, no
+shadows, no gradients beyond flat fills. No other file declares a colour.
 
-## Project structure
+Reusable components (section 10): buttons, badges, filter chips, inputs and
+selects, checkbox/radio styling, cards and panels, tables with a scrolling
+wrapper, empty states, placeholder patterns and the modal.
 
-```
-index.html            Dashboard
-explore.html          Explore Opportunities
-applications.html     My Applications
-bookmarks.html        Bookmarks
-analytics.html        Analytics
-CSS/style.css         All styles: tokens, reset, typography, layout, components
-js/data.js            Sample opportunity data
-js/app.js             Shared helpers and page behaviour
-```
+## Testing and responsive support
 
-## Data
+The project was tested manually in Chromium at **390px, 768px, 1024px and
+1440px**, with no horizontal page overflow at any of those widths.
 
-All opportunity data is **sample data** stored in `js/data.js`. Saved items and
-applications are kept in the browser's `localStorage`. There is no backend, no
-database and no account system, and nothing is fetched from a live service.
+Checked during development:
+
+* Every navigation link, script and stylesheet resolves.
+* All five statuses can be set and survive a reload.
+* New applications can be added; empty fields, missing dates, future dates and
+  duplicate title + organisation combinations are rejected.
+* Bookmark removal updates every page's count and never deletes an application.
+* Add-to-applications refuses to create a second copy of the same role.
+* Search, status, type, mode and location filters combine without resetting one
+  another, and each page has a no-results state plus a genuine empty state.
+* The drawer, all dialogs, focus traps, Escape and backdrop closing work.
+* Malformed or unavailable `localStorage` does not break a page.
+* `node --check js/app.js` passes, and the stylesheet has balanced braces.
+
+Not automated: there is no test runner, no browser automation suite and no
+accessibility audit tooling in the repository. Keyboard use and responsive
+behaviour were verified by hand rather than by CI.
+
+## Known limitations
+
+* **Frontend only.** There is no backend, database, login or synchronisation.
+  Data lives in one browser on one device.
+* **Sample data only.** The 8 opportunities in `js/data.js` are invented for the
+  demo. Nothing is fetched from a live job or internship service.
+* **No live deadlines.** Opportunity deadlines are sample dates generated
+  relative to today; application records have an applied-on date but no
+  deadline of their own.
+* **No cross-tab sync.** Two open tabs do not update each other until one is
+  reloaded; there is no `storage` event listener.
+* **No undo or delete.** Bookmarks can be removed and re-added, but there is no
+  undo. Applications can be added and have their status changed, but cannot be
+  deleted or renamed yet.
+* **Reset means clearing site data.** Restoring the sample data requires
+  clearing the two `localStorage` keys (or site data) in the browser.
+* **Rounding.** Chart percentages are rounded to whole numbers, so they can add
+  up to 99% or 101%.
+* **Narrow tables scroll.** On the smallest screens the application tables
+  scroll inside their wrapper rather than reflowing into cards.
+* **Duplicates are matched by text.** "Already tracked" means the same title and
+  organisation, compared case-insensitively; renaming a record could allow a
+  duplicate later.
+
+## Future improvements
+
+* A backend with accounts, so data follows the student between devices.
+* Editing and deleting applications, plus an undo for bookmark removal.
+* A real opportunity source (API or admin-imported data) instead of samples.
+* Deadlines tied to applications, with reminders and a calendar view.
+* CSV or JSON export/import for backup.
+* Cross-tab synchronisation with the `storage` event.
+* Automated tests (DOM unit tests for the stores, end-to-end tests for the
+  journeys) and an automated accessibility check.
+* Optional interview notes, contact details and document attachments per
+  application.
