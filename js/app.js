@@ -485,7 +485,10 @@
       title: title,
       company: company,
       appliedOn: appliedOn,
-      status: statuses.isValid(record.status) ? record.status : "Applied"
+      status: statuses.isValid(record.status) ? record.status : "Applied",
+      /* Anything other than an explicit true is treated as active, so older
+         saved records and the sample data load without a migration. */
+      archived: record.archived === true
     };
   }
 
@@ -567,6 +570,15 @@
 
   /* --- Helpers ----------------------------------------------------------- */
 
+  /* Every record the student is still tracking. Archived records sit in the
+     same array but are left out of every list, count and duplicate check, so
+     the Dashboard and Analytics stop including them automatically. */
+  function activeRecords() {
+    return records.filter(function (record) {
+      return record.archived !== true;
+    });
+  }
+
   /* Returns a copy, so callers cannot change the store by accident. */
   function copy(record) {
     return {
@@ -574,7 +586,8 @@
       title: record.title,
       company: record.company,
       appliedOn: record.appliedOn,
-      status: record.status
+      status: record.status,
+      archived: record.archived === true
     };
   }
 
@@ -601,18 +614,31 @@
 
   /* --- Public methods ---------------------------------------------------- */
 
+  /* The applications still being tracked. */
   function list() {
-    return records.map(copy);
+    return activeRecords().map(copy);
   }
 
-  /* Returns the existing record with this title and organisation, or null. */
+  /* The applications the student archived, in the order they were stored. */
+  function listArchived() {
+    return records
+      .filter(function (record) {
+        return record.archived === true;
+      })
+      .map(copy);
+  }
+
+  /* Returns the existing record with this title and organisation, or null.
+     Archived records are ignored, so an archived role can be tracked again. */
   function findDuplicate(title, company) {
-    for (var index = 0; index < records.length; index += 1) {
+    var active = activeRecords();
+
+    for (var index = 0; index < active.length; index += 1) {
       if (
-        sameText(records[index].title, title) &&
-        sameText(records[index].company, company)
+        sameText(active[index].title, title) &&
+        sameText(active[index].company, company)
       ) {
-        return copy(records[index]);
+        return copy(active[index]);
       }
     }
 
@@ -664,28 +690,74 @@
   }
 
   /* The total plus a count for every status, all at zero when there is
-     nothing to count. */
+     nothing to count. Archived applications are not counted. */
   function countByStatus() {
-    var counts = { total: records.length };
+    var active = activeRecords();
+    var counts = { total: active.length };
 
     statuses.list.forEach(function (status) {
       counts[status] = 0;
     });
 
-    records.forEach(function (record) {
+    active.forEach(function (record) {
       counts[record.status] += 1;
     });
 
     return counts;
   }
 
+  /* Hides one record without losing it. Returns false for an unknown ID or a
+     record that is already archived. */
+  function archive(id) {
+    for (var index = 0; index < records.length; index += 1) {
+      if (records[index].id === id && records[index].archived !== true) {
+        records[index].archived = true;
+        writeRecords();
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /* Brings an archived record back into the tracker. */
+  function restore(id) {
+    for (var index = 0; index < records.length; index += 1) {
+      if (records[index].id === id && records[index].archived === true) {
+        records[index].archived = false;
+        writeRecords();
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /* Deletes one record for good. There is no undo, so callers confirm first.
+     Returns false when the ID is unknown. */
+  function remove(id) {
+    for (var index = 0; index < records.length; index += 1) {
+      if (records[index].id === id) {
+        records.splice(index, 1);
+        writeRecords();
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   window.OpportunityOS.applications = {
     storageKey: STORAGE_KEY,
     list: list,
+    listArchived: listArchived,
     add: add,
     setStatus: setStatus,
     countByStatus: countByStatus,
-    findDuplicate: findDuplicate
+    findDuplicate: findDuplicate,
+    archive: archive,
+    restore: restore,
+    remove: remove
   };
 })();
 
@@ -1550,6 +1622,15 @@
   var statusInput = document.getElementById("application-status");
   var toast = document.getElementById("application-status-message");
 
+  /* Archive and delete use their own confirmation dialog. */
+  var archivedSection = document.getElementById("archived-section");
+  var archivedList = document.getElementById("archived-list");
+  var archivedCount = document.getElementById("archived-count");
+  var confirmModal = document.getElementById("confirm-modal");
+  var confirmTitle = document.getElementById("confirm-title");
+  var confirmText = document.getElementById("confirm-text");
+  var confirmAccept = document.getElementById("confirm-accept");
+
   /* Keyed by status, plus "total". */
   var overviewNumbers = {
     total: document.getElementById("overview-total"),
@@ -1678,6 +1759,41 @@
      One row layout for every screen size: it stacks on phones and becomes
      four columns at 768px (see section 13 of the stylesheet). */
 
+  /* The applied date, shared by the active rows and the archived ones. */
+  function buildDate(application) {
+    var dateBlock = createElement("p", "application-row__date");
+    dateBlock.appendChild(
+      createElement("span", "application-row__date-label", "Applied")
+    );
+    /* A space between the two, so a screen reader says "Applied 12 Nov 2026"
+       rather than running the words together. CSS ignores whitespace-only
+       children of a flex container, so the spacing stays the layout gap. */
+    dateBlock.appendChild(document.createTextNode(" "));
+
+    var time = createElement("time", "", formatDate(application.appliedOn));
+    time.setAttribute("datetime", application.appliedOn);
+    dateBlock.appendChild(time);
+
+    return dateBlock;
+  }
+
+  /* One small button for a row action. The application's title is part of the
+     accessible name, so screen-reader users know which record it affects. */
+  function buildActionButton(label, application, action, variant) {
+    var button = createElement(
+      "button",
+      "btn application-row__action " + variant,
+      label
+    );
+
+    button.type = "button";
+    button.setAttribute("data-action", action);
+    button.setAttribute("data-id", application.id);
+    button.setAttribute("aria-label", label + ": " + application.title);
+
+    return button;
+  }
+
   function buildRow(application) {
     var row = createElement("li", "application-row");
 
@@ -1692,19 +1808,7 @@
     row.appendChild(main);
 
     /* Column 2: the date, as a real <time> element. */
-    var dateBlock = createElement("p", "application-row__date");
-    dateBlock.appendChild(
-      createElement("span", "application-row__date-label", "Applied")
-    );
-    /* A space between the two, so a screen reader says "Applied 12 Nov 2026"
-       rather than running the words together. CSS ignores whitespace-only
-       children of a flex container, so the spacing stays the layout gap. */
-    dateBlock.appendChild(document.createTextNode(" "));
-
-    var time = createElement("time", "", formatDate(application.appliedOn));
-    time.setAttribute("datetime", application.appliedOn);
-    dateBlock.appendChild(time);
-    row.appendChild(dateBlock);
+    row.appendChild(buildDate(application));
 
     /* Column 3: the current status, always with its text. */
     var statusBlock = createElement("div", "application-row__status");
@@ -1744,6 +1848,54 @@
     control.appendChild(select);
     row.appendChild(control);
 
+    /* Column 5: archive and delete, both confirmed before anything happens. */
+    var actions = createElement("div", "application-row__actions");
+    actions.appendChild(
+      buildActionButton("Archive", application, "archive", "btn--secondary")
+    );
+    actions.appendChild(
+      buildActionButton("Delete", application, "delete", "btn--danger")
+    );
+    row.appendChild(actions);
+
+    return row;
+  }
+
+  /* An archived row keeps its details and offers the two ways back: restore
+     it, or delete it for good. */
+  function buildArchivedRow(application) {
+    var row = createElement("li", "application-row application-row--archived");
+
+    var main = createElement("div", "application-row__main");
+    main.appendChild(
+      createElement("p", "application-row__title", application.title)
+    );
+    main.appendChild(
+      createElement("p", "application-row__org", application.company)
+    );
+    row.appendChild(main);
+
+    row.appendChild(buildDate(application));
+
+    var statusBlock = createElement("div", "application-row__status");
+    statusBlock.appendChild(
+      createElement(
+        "span",
+        "badge " + statuses.badgeClass(application.status),
+        application.status
+      )
+    );
+    row.appendChild(statusBlock);
+
+    var actions = createElement("div", "application-row__actions");
+    actions.appendChild(
+      buildActionButton("Restore", application, "restore", "btn--secondary")
+    );
+    actions.appendChild(
+      buildActionButton("Delete", application, "delete", "btn--danger")
+    );
+    row.appendChild(actions);
+
     return row;
   }
 
@@ -1762,6 +1914,11 @@
     });
 
     renderOverview();
+
+    /* The archived list is independent of the search and status filters, and
+       is drawn before the early returns below so it always stays current. */
+    renderArchived();
+
     list.textContent = "";
 
     /* Empty tracker: the two empty states are never shown together. */
@@ -1804,6 +1961,31 @@
     });
   }
 
+  /* --- Archived list ------------------------------------------------------- */
+
+  function renderArchived() {
+    if (!archivedSection || !archivedList) {
+      return;
+    }
+
+    var archived = store.listArchived();
+    archivedList.textContent = "";
+
+    /* Nothing archived: keep the whole section out of the page. */
+    archivedSection.hidden = archived.length === 0;
+
+    if (archivedCount) {
+      archivedCount.textContent =
+        archived.length === 1
+          ? "1 archived application"
+          : archived.length + " archived applications";
+    }
+
+    archived.forEach(function (application) {
+      archivedList.appendChild(buildArchivedRow(application));
+    });
+  }
+
   /* --- Status changes -----------------------------------------------------
      One listener on the list handles every dropdown. */
 
@@ -1835,6 +2017,218 @@
 
     announce(record.title + " moved to " + nextStatus + ".");
   });
+
+  /* --- Archive, delete and restore ----------------------------------------
+     Archive keeps the record but hides it from My Applications, the Dashboard
+     and Analytics. Delete removes it for good. Neither happens on the first
+     click: each opens the confirmation dialog, which is filled in with the
+     right wording and button label just before it appears. */
+
+  var pendingAction = null;
+  var confirmTrigger = null;
+
+  /* Looks in both lists, so the same click handler serves active rows and
+     archived ones. */
+  function findAnywhere(id) {
+    var all = store.list().concat(store.listArchived());
+
+    for (var index = 0; index < all.length; index += 1) {
+      if (all[index].id === id) {
+        return all[index];
+      }
+    }
+
+    return null;
+  }
+
+  function openConfirm(type, application, trigger) {
+    if (!confirmModal) {
+      return;
+    }
+
+    var isDelete = type === "delete";
+
+    /* Remember what to do if the user confirms, and where focus came from. */
+    pendingAction = {
+      type: type,
+      id: application.id,
+      title: application.title
+    };
+    confirmTrigger = trigger || document.activeElement;
+
+    if (confirmTitle) {
+      confirmTitle.textContent = isDelete
+        ? "Delete application?"
+        : "Archive application?";
+    }
+
+    /* Curly quotes keep the title readable inside the sentence. */
+    if (confirmText) {
+      confirmText.textContent = isDelete
+        ? "\u201C" +
+          application.title +
+          "\u201D at " +
+          application.company +
+          " will be removed from this browser permanently. This cannot be undone."
+        : "\u201C" +
+          application.title +
+          "\u201D at " +
+          application.company +
+          " will be hidden from My Applications, the Dashboard and Analytics. You can restore it from the Archived list at any time.";
+    }
+
+    if (confirmAccept) {
+      confirmAccept.textContent = isDelete
+        ? "Delete permanently"
+        : "Archive application";
+      confirmAccept.className = isDelete
+        ? "btn btn--danger"
+        : "btn btn--primary";
+    }
+
+    confirmModal.hidden = false;
+    document.addEventListener("keydown", handleConfirmKeydown);
+
+    /* Focus starts on the safe choice when a record would be deleted. The
+       backdrop is also a [data-confirm-cancel] element but cannot take focus,
+       so the visible Cancel button in the footer is picked instead. */
+    var cancelButton = confirmModal.querySelector(
+      ".modal__footer [data-confirm-cancel]"
+    );
+
+    if (!isDelete && confirmAccept) {
+      confirmAccept.focus();
+    } else if (cancelButton) {
+      cancelButton.focus();
+    }
+  }
+
+  function closeConfirm() {
+    if (!confirmModal || confirmModal.hidden) {
+      return;
+    }
+
+    confirmModal.hidden = true;
+    pendingAction = null;
+    document.removeEventListener("keydown", handleConfirmKeydown);
+
+    /* The row's buttons are redrawn after a change, so the trigger may be
+       gone; only restore focus to it when it is still on the page. */
+    if (confirmTrigger && document.contains(confirmTrigger)) {
+      confirmTrigger.focus();
+    } else if (addButtons.length > 0) {
+      addButtons[0].focus();
+    }
+
+    confirmTrigger = null;
+  }
+
+  function handleConfirmKeydown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeConfirm();
+      return;
+    }
+
+    /* Keep Tab inside the dialog while it is open. */
+    if (event.key !== "Tab") {
+      return;
+    }
+
+    var focusable = confirmModal.querySelectorAll("button:not([disabled])");
+
+    if (focusable.length === 0) {
+      return;
+    }
+
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  /* The Cancel button, the close button and the backdrop all cancel. */
+  if (confirmModal) {
+    confirmModal.addEventListener("click", function (event) {
+      if (event.target.closest("[data-confirm-cancel]")) {
+        closeConfirm();
+      }
+    });
+  }
+
+  if (confirmAccept) {
+    confirmAccept.addEventListener("click", function () {
+      if (!pendingAction) {
+        closeConfirm();
+        return;
+      }
+
+      var action = pendingAction;
+      var changed =
+        action.type === "delete"
+          ? store.remove(action.id)
+          : store.archive(action.id);
+
+      closeConfirm();
+
+      /* Both lists, the five overview numbers and the live count redraw from
+         the store, so this page can never disagree with the saved data. */
+      render();
+
+      announce(
+        changed
+          ? action.title +
+              (action.type === "delete" ? " deleted." : " archived.")
+          : "That application could not be changed."
+      );
+    });
+  }
+
+  /* One handler for every row button, in either list. */
+  function handleRowAction(event) {
+    var button = event.target.closest("button[data-action]");
+    if (!button) {
+      return;
+    }
+
+    var id = button.getAttribute("data-id");
+    var application = findAnywhere(id);
+
+    if (!application) {
+      return;
+    }
+
+    var action = button.getAttribute("data-action");
+
+    if (action === "restore") {
+      if (store.restore(id)) {
+        render();
+
+        /* The row has moved to the main list; put focus on its new control. */
+        var restored = list.querySelector('select[data-id="' + id + '"]');
+        if (restored) {
+          restored.focus();
+        }
+
+        announce(application.title + " restored to My Applications.");
+      }
+      return;
+    }
+
+    openConfirm(action, application, button);
+  }
+
+  list.addEventListener("click", handleRowAction);
+
+  if (archivedList) {
+    archivedList.addEventListener("click", handleRowAction);
+  }
 
   /* --- Add application dialog --------------------------------------------- */
 

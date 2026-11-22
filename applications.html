@@ -272,6 +272,25 @@
               </button>
             </div>
           </section>
+
+          <!-- E. Archived applications -----------------------------------
+               Archiving hides a record from every page without deleting it.
+               The section only appears while something is archived. -->
+          <section id="archived-section" aria-labelledby="archived-title" hidden>
+            <div class="section-head">
+              <h2 class="section-head__title" id="archived-title">
+                Archived
+              </h2>
+              <p class="result-count" id="archived-count" role="status" aria-live="polite"></p>
+            </div>
+
+            <p class="text-small text-muted">
+              Archived applications are not counted on the Dashboard or in
+              Analytics. Restore one to track it again.
+            </p>
+
+            <ul class="application-list" id="archived-list"></ul>
+          </section>
         </div>
       </main>
     </div>
@@ -375,6 +394,43 @@
             </button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- F. Archive and delete confirmation. One shared dialog is filled in by
+         js/app.js for whichever action was clicked. -->
+    <div class="modal" id="confirm-modal" hidden>
+      <div class="modal__backdrop" data-confirm-cancel></div>
+
+      <div
+        class="modal__dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+        aria-describedby="confirm-text"
+      >
+        <div class="modal__header">
+          <h2 class="modal__title" id="confirm-title">Confirm</h2>
+          <button
+            class="modal__close"
+            type="button"
+            data-confirm-cancel
+            aria-label="Close confirmation dialog"
+          >
+            Close
+          </button>
+        </div>
+
+        <p class="modal__text" id="confirm-text"></p>
+
+        <div class="modal__footer">
+          <button class="btn btn--secondary" type="button" data-confirm-cancel>
+            Cancel
+          </button>
+          <button class="btn btn--danger" type="button" id="confirm-accept">
+            Delete permanently
+          </button>
+        </div>
       </div>
     </div>
 

@@ -1281,6 +1281,13 @@ body.drawer-open .overlay {
   text-align: center;
 }
 
+/* A page that has data hides its empty state with the hidden attribute, but
+   `display: flex` above would otherwise override the browser's default
+   hidden rule, so the empty block would still be visible. */
+.empty[hidden] {
+  display: none;
+}
+
 .empty__title {
   font-size: var(--fs-h3);
   line-height: var(--lh-h3);
@@ -2008,7 +2015,8 @@ body.drawer-open .overlay {
   grid-template-areas:
     "main main"
     "date status"
-    "control control";
+    "control control"
+    "actions actions";
   align-items: center;
   gap: var(--space-2) var(--space-3);
   padding: var(--space-4);
@@ -2096,6 +2104,33 @@ body.drawer-open .overlay {
   font-size: var(--fs-small);
 }
 
+/* --- Row actions ------------------------------------------------------
+   Archive and delete belong to the row they change, so they sit inside it
+   rather than in a toolbar. Both open the confirmation dialog: nothing is
+   archived or deleted on the first click. */
+.application-row__actions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Smaller than a page-level button, because two sit side by side in a row. */
+.application-row__action {
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  font-size: var(--fs-small);
+}
+
+/* An archived row has no status control, so its actions take the space the
+   dropdown would have used. */
+.application-row--archived {
+  grid-template-areas:
+    "main main"
+    "date status"
+    "actions actions";
+}
+
 /* --- Add application form --------------------------------------------- */
 
 .application-form {
@@ -2141,9 +2176,15 @@ body.drawer-open .overlay {
   }
 
   .application-row {
-    grid-template-columns: minmax(0, 1fr) auto auto 168px;
-    grid-template-areas: "main date status control";
+    grid-template-columns: minmax(0, 1fr) auto auto 168px auto;
+    grid-template-areas: "main date status control actions";
     gap: var(--space-3);
+  }
+
+  /* Four columns plus the actions, because there is no status dropdown. */
+  .application-row--archived {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    grid-template-areas: "main date status actions";
   }
 
   .application-row__date {
@@ -2160,7 +2201,7 @@ body.drawer-open .overlay {
   }
 
   .application-row {
-    grid-template-columns: minmax(0, 1fr) auto auto 190px;
+    grid-template-columns: minmax(0, 1fr) auto auto 190px auto;
   }
 }
 

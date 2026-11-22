@@ -35,8 +35,10 @@ from first submission to final outcome.
 * **Explore Opportunities** — search by title or organisation, filter by type,
   work mode and location, open a details dialog, save or unsave opportunities.
 * **My Applications** — five overview cards, a filterable application list with
-  an inline status dropdown, and an add-application dialog with validation and
-  duplicate prevention.
+  an inline status dropdown, an add-application dialog with validation and
+  duplicate prevention, and per-row archive or delete behind a confirmation
+  dialog. Archived applications are hidden from every page and can be restored
+  from the Archived section.
 * **Bookmarks** — the saved opportunities as cards, with remove, details and
   add-to-applications actions.
 * **Analytics** — six overview numbers, a CSS bar chart of the five statuses,
@@ -112,9 +114,14 @@ Each application record looks like this:
   "title": "Product Design Intern",
   "company": "Northwind Studio",
   "appliedOn": "2026-11-12",
-  "status": "Under review"
+  "status": "Under review",
+  "archived": false
 }
 ```
+
+`archived` is `false` for everything being tracked. An archived record keeps its
+`true` flag, which is why the Dashboard, Analytics and every count leave it out
+while it can still be restored.
 
 Rules the stores follow:
 
@@ -198,6 +205,9 @@ Checked during development:
   duplicate title + organisation combinations are rejected.
 * Bookmark removal updates every page's count and never deletes an application.
 * Add-to-applications refuses to create a second copy of the same role.
+* Archiving an application removes it from the count, the Dashboard table and
+  the Analytics chart, and restoring it brings it back; deleting it after
+  confirmation removes it for good.
 * Search, status, type, mode and location filters combine without resetting one
   another, and each page has a no-results state plus a genuine empty state.
 * The drawer, all dialogs, focus traps, Escape and backdrop closing work.
@@ -219,9 +229,12 @@ behaviour were verified by hand rather than by CI.
   deadline of their own.
 * **No cross-tab sync.** Two open tabs do not update each other until one is
   reloaded; there is no `storage` event listener.
-* **No undo or delete.** Bookmarks can be removed and re-added, but there is no
-  undo. Applications can be added and have their status changed, but cannot be
-  deleted or renamed yet.
+* **No undo.** Bookmarks can be removed and re-added. Applications can be
+  archived (reversible) or deleted permanently after a confirmation dialog, but
+  a deleted application cannot be recovered and there is no undo for either
+  action.
+* **No editing.** An application's title, organisation and applied-on date are
+  fixed once added; only its status, archive state and existence can change.
 * **Reset means clearing site data.** Restoring the sample data requires
   clearing the two `localStorage` keys (or site data) in the browser.
 * **Rounding.** Chart percentages are rounded to whole numbers, so they can add
@@ -235,7 +248,8 @@ behaviour were verified by hand rather than by CI.
 ## Future improvements
 
 * A backend with accounts, so data follows the student between devices.
-* Editing and deleting applications, plus an undo for bookmark removal.
+* Editing applications after they are added, plus an undo for deletion and
+  bookmark removal.
 * A real opportunity source (API or admin-imported data) instead of samples.
 * Deadlines tied to applications, with reminders and a calendar view.
 * CSV or JSON export/import for backup.
